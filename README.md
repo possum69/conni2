@@ -26,6 +26,12 @@ python3 server.py --host 0.0.0.0 --port 8080
 
 Stop the server with `Ctrl+C`.
 
+## Deploy to Render
+
+This repository includes a Render Blueprint in `render.yaml`. In Render, create a new Blueprint instance from the repository and accept the `openspace` web service. Render installs the (empty) `requirements.txt` and starts the server on its assigned port.
+
+The default Blueprint uses Render's free plan. Its filesystem is ephemeral, so changes saved to `program.json` may be lost when the service restarts or is redeployed. For persistent event data, use a paid Render instance with a persistent disk and configure the application data file to live on that disk before deploying.
+
 ## Multi-user use
 
 For a small event with roughly 250 users, run one server process on a machine reachable by the attendees. To accept connections from the local network, start it with `--host 0.0.0.0` and share the machine's network address, for example `http://192.168.1.20:8000/`.

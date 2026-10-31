@@ -8,7 +8,8 @@ from functools import wraps
 from concurrent.futures import ThreadPoolExecutor
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
+from uuid import uuid4
 
 
 ROOT = Path(__file__).resolve().parent
@@ -65,6 +66,28 @@ class ConniHandler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
+    def do_GET(self):
+        request_path = urlparse(self.path).path
+        if request_path not in ("/api/events", "/api/event"):
+            super().do_GET()
+            return
+
+        try:
+            data = self.read_data()
+            if request_path == "/api/events":
+                self.send_json(200, {
+                    "events": [{"id": event["id"], "name": event["name"]} for event in data["events"]]
+                })
+                return
+
+            event = self.find_event(data, self.requested_event_id())
+            if event is None:
+                self.send_json(404, {"error": "Event not found"})
+                return
+            self.send_json(200, {"event": event})
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+            self.send_json(500, {"error": "Could not load event data"})
+
     def send_json(self, status, payload):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -73,11 +96,34 @@ class ConniHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    @staticmethod
+    def find_event(data, event_id):
+        events = data.get("events", [])
+        if event_id is None and events:
+            return events[0]
+        return next((event for event in events if event.get("id") == event_id), None)
+
+    def requested_event_id(self):
+        return parse_qs(urlparse(self.path).query).get("eventId", [None])[0]
+
+    def read_data(self):
+        with DATA_LOCK:
+            data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+            return data
+
+    def read_event_data(self):
+        data = self.read_data()
+        event = self.find_event(data, self.requested_event_id())
+        if event is None:
+            self.send_json(404, {"error": "Event not found"})
+            return None, None
+        return data, event
+
     @serialize_data_mutation
     def do_POST(self):
-        """Handle like updates and topic or location creation requests."""
+        """Handle like updates and event, topic, or location creation requests."""
         request_path = urlparse(self.path).path
-        if request_path not in ("/api/like", "/api/topics", "/api/locations"):
+        if request_path not in ("/api/events", "/api/like", "/api/topics", "/api/locations"):
             self.send_json(404, {"error": "Not found"})
             return
 
@@ -92,11 +138,17 @@ class ConniHandler(SimpleHTTPRequestHandler):
                 self.send_json(400, {"error": "Invalid request body"})
                 return
 
+            if request_path == "/api/events":
+                self.create_event(request)
+                return
+            data, event = self.read_event_data()
+            if event is None:
+                return
             if request_path == "/api/topics":
-                self.create_topic(request)
+                self.create_topic(request, data, event)
                 return
             if request_path == "/api/locations":
-                self.create_location(request)
+                self.create_location(request, data, event)
                 return
 
             item_type = request.get("itemType")
@@ -117,9 +169,8 @@ class ConniHandler(SimpleHTTPRequestHandler):
                 self.send_json(400, {"error": "Invalid like state"})
                 return
 
-            data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
             item = next(
-                (entry for entry in data.get(item_type, []) if entry.get("name") == item_name),
+                (entry for entry in event.get(item_type, []) if entry.get("name") == item_name),
                 None,
             )
             if item is None:
@@ -146,7 +197,8 @@ class ConniHandler(SimpleHTTPRequestHandler):
 
     @serialize_data_mutation
     def do_DELETE(self):
-        if urlparse(self.path).path != "/api/items":
+        request_path = urlparse(self.path).path
+        if request_path not in ("/api/items", "/api/events"):
             self.send_json(404, {"error": "Not found"})
             return
 
@@ -161,6 +213,10 @@ class ConniHandler(SimpleHTTPRequestHandler):
                 self.send_json(400, {"error": "Invalid request body"})
                 return
 
+            if request_path == "/api/events":
+                self.delete_event(request)
+                return
+
             item_type = request.get("itemType")
             item_name = request.get("itemName")
             if item_type not in ("program", "topics"):
@@ -170,8 +226,10 @@ class ConniHandler(SimpleHTTPRequestHandler):
                 self.send_json(400, {"error": "Invalid item name"})
                 return
 
-            data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
-            items = data.get(item_type, [])
+            data, event = self.read_event_data()
+            if event is None:
+                return
+            items = event.get(item_type, [])
             item_index = next(
                 (index for index, item in enumerate(items) if item.get("name") == item_name),
                 None,
@@ -190,9 +248,9 @@ class ConniHandler(SimpleHTTPRequestHandler):
 
     @serialize_data_mutation
     def do_PUT(self):
-        """Update a program item, topic, or location from a JSON body."""
+        """Update an event, program item, topic, or location from a JSON body."""
         request_path = urlparse(self.path).path
-        if request_path not in ("/api/items", "/api/locations"):
+        if request_path not in ("/api/events", "/api/items", "/api/locations"):
             self.send_json(404, {"error": "Not found"})
             return
 
@@ -207,8 +265,15 @@ class ConniHandler(SimpleHTTPRequestHandler):
                 self.send_json(400, {"error": "Invalid request body"})
                 return
 
+            if request_path == "/api/events":
+                self.update_event(request)
+                return
+
+            data, event = self.read_event_data()
+            if event is None:
+                return
             if request_path == "/api/locations":
-                self.update_location(request)
+                self.update_location(request, data, event)
                 return
 
             source_type = request.get("itemType")
@@ -238,8 +303,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
                 self.send_json(400, {"error": "Invalid language list"})
                 return
 
-            data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
-            source_items = data.get(source_type, [])
+            source_items = event.get(source_type, [])
             source_index = next(
                 (index for index, entry in enumerate(source_items) if entry.get("name") == item_name),
                 None,
@@ -249,7 +313,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
                 return
 
             item = source_items[source_index]
-            target_items = data.setdefault(target_type, [])
+            target_items = event.setdefault(target_type, [])
             normalized_name = name.strip().casefold()
             if any(
                 entry is not item and entry.get("name", "").strip().casefold() == normalized_name
@@ -272,7 +336,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
                 start = request.get("start")
                 end = request.get("end")
                 valid_location = isinstance(location, str) and any(
-                    entry.get("name") == location for entry in data.get("locations", [])
+                    entry.get("name") == location for entry in event.get("locations", [])
                 )
                 if not valid_location:
                     self.send_json(400, {"error": "Select a valid location"})
@@ -320,7 +384,76 @@ class ConniHandler(SimpleHTTPRequestHandler):
         except OSError:
             self.send_json(500, {"error": "Could not save program.json"})
 
-    def create_topic(self, request):
+    def create_event(self, request):
+        name = request.get("name")
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 160:
+            self.send_json(400, {"error": "An event name of 1 to 160 characters is required"})
+            return
+
+        data = self.read_data()
+        normalized_name = name.strip().casefold()
+        if any(event.get("name", "").strip().casefold() == normalized_name for event in data["events"]):
+            self.send_json(409, {"error": "An event with that name already exists"})
+            return
+
+        event = {
+            "id": uuid4().hex,
+            "name": name.strip(),
+            "program": [],
+            "topics": [],
+            "locations": [],
+        }
+        data["events"].append(event)
+        self.write_data(data)
+        self.send_json(201, {"event": event})
+
+    def update_event(self, request):
+        event_id = request.get("eventId")
+        name = request.get("name")
+        if not isinstance(event_id, str) or not event_id:
+            self.send_json(400, {"error": "Invalid event"})
+            return
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 160:
+            self.send_json(400, {"error": "An event name of 1 to 160 characters is required"})
+            return
+
+        data = self.read_data()
+        event = self.find_event(data, event_id)
+        if event is None:
+            self.send_json(404, {"error": "Event not found"})
+            return
+        normalized_name = name.strip().casefold()
+        if any(
+            candidate is not event and candidate.get("name", "").strip().casefold() == normalized_name
+            for candidate in data["events"]
+        ):
+            self.send_json(409, {"error": "An event with that name already exists"})
+            return
+
+        event["name"] = name.strip()
+        self.write_data(data)
+        self.send_json(200, {"event": event})
+
+    def delete_event(self, request):
+        event_id = request.get("eventId")
+        if not isinstance(event_id, str) or not event_id:
+            self.send_json(400, {"error": "Invalid event"})
+            return
+
+        data = self.read_data()
+        event_index = next(
+            (index for index, event in enumerate(data["events"]) if event.get("id") == event_id),
+            None,
+        )
+        if event_index is None:
+            self.send_json(404, {"error": "Event not found"})
+            return
+
+        deleted_event = data["events"].pop(event_index)
+        self.write_data(data)
+        self.send_json(200, {"event": deleted_event})
+
+    def create_topic(self, request, data, event):
         name = request.get("name")
         description = request.get("description")
         contributors = request.get("contributors", [])
@@ -340,8 +473,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
             return
 
         normalized_name = name.strip().casefold()
-        data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
-        topics = data.setdefault("topics", [])
+        topics = event.setdefault("topics", [])
         if any(topic.get("name", "").strip().casefold() == normalized_name for topic in topics):
             self.send_json(409, {"error": "A topic with that name already exists"})
             return
@@ -358,7 +490,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
         self.write_data(data)
         self.send_json(201, {"topic": topic})
 
-    def create_location(self, request):
+    def create_location(self, request, data, event):
         """Validate and append a location with optional capacity and facilities."""
         name = request.get("name")
         description = request.get("description")
@@ -378,8 +510,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
             self.send_json(400, {"error": "Capacity must be a positive whole number"})
             return
 
-        data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
-        locations = data.setdefault("locations", [])
+        locations = event.setdefault("locations", [])
         normalized_name = name.strip().casefold()
         if any(location.get("name", "").strip().casefold() == normalized_name for location in locations):
             self.send_json(409, {"error": "A location with that name already exists"})
@@ -397,7 +528,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
         self.write_data(data)
         self.send_json(201, {"location": location})
 
-    def update_location(self, request):
+    def update_location(self, request, data, event):
         """Update a location and keep program references in sync after a rename."""
         item_name = request.get("itemName")
         name = request.get("name")
@@ -421,8 +552,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
             self.send_json(400, {"error": "Capacity must be a positive whole number"})
             return
 
-        data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
-        locations = data.get("locations", [])
+        locations = event.get("locations", [])
         location_index = next(
             (index for index, location in enumerate(locations) if location.get("name") == item_name),
             None,
@@ -453,7 +583,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
 
         locations[location_index] = updated_location
         if previous_name != updated_location["name"]:
-            for program_item in data.get("program", []):
+            for program_item in event.get("program", []):
                 if program_item.get("location") == previous_name:
                     program_item["location"] = updated_location["name"]
 
@@ -509,13 +639,13 @@ class ConniHandler(SimpleHTTPRequestHandler):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Serve SemWo and save likes to program.json")
+    parser = argparse.ArgumentParser(description="Serve OpenSpace and save likes to program.json")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
 
     server = ConniHTTPServer((args.host, args.port), ConniHandler)
-    print(f"Serving SemWo at http://{args.host}:{args.port}/")
+    print(f"Serving OpenSpace at http://{args.host}:{args.port}/")
     server.serve_forever()
 
 

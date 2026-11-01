@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.cookies import SimpleCookie
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 from uuid import uuid4
 
 from authlib.integrations.requests_client import OAuth2Session

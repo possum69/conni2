@@ -1,6 +1,6 @@
 # OpenSpace
 
-A small OpenSpace program and topic browser. It is an HTML/CSS/JavaScript interface served by a Python HTTP server, with editable data stored in `program.json` and sign-in handled by GitHub OAuth.
+A small OpenSpace program and topic browser. The HTML/CSS/JavaScript interface and Python HTTP server live in `src/`; editable event data lives in `data/program.json`.
 
 ## Run locally
 
@@ -11,23 +11,25 @@ On Windows:
 ```powershell
 py -m pip install -r requirements.txt
 $env:LOCAL_AUTH_BYPASS = "true"
-py server.py
+py src/server.py
 ```
 
 On other systems, use:
 
 ```sh
 python3 -m pip install -r requirements.txt
-LOCAL_AUTH_BYPASS=true python3 server.py
+LOCAL_AUTH_BYPASS=true python3 src/server.py
 ```
 
 Open <http://127.0.0.1:8000/>. The default host and port can be changed with `--host` and `--port`, for example:
 
 ```sh
-python3 server.py --host 0.0.0.0 --port 8080
+python3 src/server.py --host 0.0.0.0 --port 8080
 ```
 
 Stop the server with `Ctrl+C`.
+
+Run the test suite with `py -m unittest discover -s tests` on Windows or `python3 -m unittest discover -s tests` elsewhere.
 
 `LOCAL_AUTH_BYPASS=true` signs local loopback requests in as a development user without GitHub. On first visit, enter a name; it is saved in a local-only cookie and used for likes. Use **Change local name** to update it. The bypass is ignored on Render and for non-loopback clients. Events created in this mode use the `local-development` creator ID; assign the real GitHub creator ID before moving those events to production.
 
@@ -52,15 +54,15 @@ Save the variables and redeploy. Keep the GitHub client secret and session secre
 
 ## Deploy to Render
 
-This repository includes a Render Blueprint in `render.yaml`. In Render, create a new Blueprint instance from the repository and accept the `openspace` web service. Render installs the (empty) `requirements.txt` and starts the server on its assigned port.
+This repository includes a Render Blueprint in `render.yaml`. In Render, create a new Blueprint instance from the repository and accept the `openspace` web service. Render installs dependencies from `requirements.txt` and starts `src/server.py` on its assigned port.
 
-The default Blueprint uses Render's free plan. Its filesystem is ephemeral, so changes saved to `program.json` may be lost when the service restarts or is redeployed. For persistent event data, use a paid Render instance with a persistent disk and configure the application data file to live on that disk before deploying.
+The default Blueprint uses Render's free plan. Its filesystem is ephemeral, so changes saved to `data/program.json` may be lost when the service restarts or is redeployed. For persistent event data, use a paid Render instance with a persistent disk and configure the application data file to live on that disk before deploying.
 
 ## Multi-user use
 
 For a small event with roughly 250 users, run one server process on a machine reachable by the attendees. To accept connections from the local network, start it with `--host 0.0.0.0` and share the machine's network address, for example `http://192.168.1.20:8000/`.
 
-The server runs up to 64 request workers and admits up to 256 additional queued requests. Data-changing requests are serialized so simultaneous likes, edits, and creates cannot overwrite one another in `program.json`. API requests require a GitHub session, and the JSON data file is not exposed as a static file. Users can only list, load, or change events for which they are the creator or have been authorized by the creator. Event rename/delete and authorized-user management are checked server-side against the creator's stable GitHub user ID. Any GitHub account can sign in, but it cannot access an event until authorized. Item edit/delete is not restricted server-side to listed contributors; any authorized event member can change its items. This JSON-backed setup assumes one server process; for multiple instances or sustained high write volume, use a transactional database.
+The server runs up to 64 request workers and admits up to 256 additional queued requests. Data-changing requests are serialized so simultaneous likes, edits, and creates cannot overwrite one another in `data/program.json`. API requests require a GitHub session, and the JSON data file is not exposed as a static file. Users can only list, load, or change events for which they are the creator or have been authorized by the creator. Event rename/delete and authorized-user management are checked server-side against the creator's stable GitHub user ID. Any GitHub account can sign in, but it cannot access an event until authorized. Item edit/delete is not restricted server-side to listed contributors; any authorized event member can change its items. This JSON-backed setup assumes one server process; for multiple instances or sustained high write volume, use a transactional database.
 
 ## Features
 
@@ -76,13 +78,13 @@ The server runs up to 64 request workers and admits up to 256 additional queued 
 
 ## Data
 
-After its first load, `program.json` contains an `events` array. Each newly created event records `creatorId` (the creator's GitHub user ID), `creatorLogin`, and an `authorizedUsers` array containing GitHub login strings or `{ "id": "...", "login": "..." }` accounts. The creator has access implicitly. New grants store the login and match it against the login verified by OAuth; numeric IDs are preferred when already present. Each event also has its own:
+`data/program.json` contains an `events` array. Each newly created event records `creatorId` (the creator's GitHub user ID), `creatorLogin`, and an `authorizedUsers` array containing GitHub login strings or `{ "id": "...", "login": "..." }` accounts. The creator has access implicitly. New grants store the login and match it against the login verified by OAuth; numeric IDs are preferred when already present. Each event also has its own:
 
 - `program`: scheduled items, including location, date, start/end time, contributors, languages, and likes.
 - `topics`: unscheduled topic ideas, with descriptions, contributors, languages, and likes.
 - `locations`: locations with descriptions and optional capacity and facilities.
 
-Changes made in the interface are written back to `program.json`. New events start with their own empty program, topics, locations, and authorization list. For legacy events, set `creatorLogin` to the creator's exact GitHub login if there is no numeric `creatorId`; authorized entries may be login strings or objects with a `login` when importing older lists. Numeric GitHub IDs remain preferred and are used for entries created through the interface. Keep a backup before manually editing or replacing this file.
+Changes made in the interface are written back to `data/program.json`. New events start with their own empty program, topics, locations, and authorization list. For legacy events, set `creatorLogin` to the creator's exact GitHub login if there is no numeric `creatorId`; authorized entries may be login strings or objects with a `login` when importing older lists. Numeric GitHub IDs remain preferred and are used for entries created through the interface. Keep a backup before manually editing or replacing this file.
 
 ## API
 

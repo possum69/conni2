@@ -19,8 +19,10 @@ from authlib.integrations.requests_client import OAuth2Session
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ROOT = Path(__file__).resolve().parent
-DATA_FILE = ROOT / "program.json"
+DATA_DIR = PROJECT_ROOT / "data"
+DATA_FILE = DATA_DIR / "program.json"
 MAX_REQUEST_SIZE = 16_384
 MAX_REQUEST_WORKERS = 64
 MAX_QUEUED_REQUESTS = 256
@@ -77,8 +79,8 @@ class ConniHandler(SimpleHTTPRequestHandler):
     def send_head(self):
         served_path = Path(self.translate_path(self.path)).resolve()
         data_path = DATA_FILE.resolve()
-        root_path = ROOT.resolve()
-        if served_path == data_path or (served_path.parent == root_path and served_path.name.startswith(".program-")):
+        data_dir = DATA_DIR.resolve()
+        if served_path == data_path or (served_path.parent == data_dir and served_path.name.startswith(".program-")):
             self.send_error(404, "File not found")
             return None
         return super().send_head()
@@ -498,7 +500,8 @@ class ConniHandler(SimpleHTTPRequestHandler):
             self.send_json(200, {"itemType": item_type, "item": item})
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
             self.send_json(400, {"error": "Invalid JSON request"})
-        except OSError:
+        except OSError as error:
+            self.log_error("Could not save %s: %s", DATA_FILE, error)
             self.send_json(500, {"error": "Could not save program.json"})
 
     @serialize_data_mutation
@@ -555,7 +558,8 @@ class ConniHandler(SimpleHTTPRequestHandler):
             self.send_json(200, {"itemType": item_type, "item": deleted_item})
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
             self.send_json(400, {"error": "Invalid JSON request"})
-        except OSError:
+        except OSError as error:
+            self.log_error("Could not save %s: %s", DATA_FILE, error)
             self.send_json(500, {"error": "Could not save program.json"})
 
     @serialize_data_mutation
@@ -699,7 +703,8 @@ class ConniHandler(SimpleHTTPRequestHandler):
             })
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
             self.send_json(400, {"error": "Invalid JSON request"})
-        except OSError:
+        except OSError as error:
+            self.log_error("Could not save %s: %s", DATA_FILE, error)
             self.send_json(500, {"error": "Could not save program.json"})
 
     def create_event(self, request, user):
@@ -1034,8 +1039,9 @@ class ConniHandler(SimpleHTTPRequestHandler):
 
     @staticmethod
     def write_data(data):
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
         file_descriptor, temporary_path = tempfile.mkstemp(
-            dir=ROOT,
+            dir=DATA_DIR,
             prefix=".program-",
             suffix=".tmp",
             text=True,

@@ -57,11 +57,11 @@ The default Blueprint uses Render's free plan. Its filesystem is ephemeral, so c
 
 For a small event with roughly 250 users, run one server process on a machine reachable by the attendees. To accept connections from the local network, start it with `--host 0.0.0.0` and share the machine's network address, for example `http://192.168.1.20:8000/`.
 
-The server runs up to 64 request workers and admits up to 256 additional queued requests. Data-changing requests are serialized so simultaneous likes, edits, and creates cannot overwrite one another in `program.json`. API requests require a GitHub session, and event rename/delete is checked server-side against the creator's stable GitHub user ID. Any GitHub account can sign in; there is no account allowlist. Item edit/delete is not restricted server-side to the listed contributors, so add item-level authorization before using this app where signed-in users are not equally trusted. This JSON-backed setup assumes one server process; for multiple instances or sustained high write volume, use a transactional database.
+The server runs up to 64 request workers and admits up to 256 additional queued requests. Data-changing requests are serialized so simultaneous likes, edits, and creates cannot overwrite one another in `program.json`. API requests require a GitHub session, and the JSON data file is not exposed as a static file. Users can only list, load, or change events for which they are the creator or have been authorized by the creator. Event rename/delete and authorized-user management are checked server-side against the creator's stable GitHub user ID. Any GitHub account can sign in, but it cannot access an event until authorized. Item edit/delete is not restricted server-side to listed contributors; any authorized event member can change its items. This JSON-backed setup assumes one server process; for multiple instances or sustained high write volume, use a transactional database.
 
 ## Features
 
-- Sign in with GitHub, then choose an existing event or create one. Only the event creator's GitHub account can rename or delete it.
+- Sign in with GitHub, then choose an event you can access or create one. The creator can grant or revoke access for other GitHub accounts, and only the creator can rename or delete the event.
 - Keep each event's locations, scheduled program, and topic ideas separate.
 - Browse the program in list or calendar view; filter by language, likes, contributions, or search terms and see the matching item count.
 - Browse and create topics, edit item details, and schedule a topic in the program; the topic view shows the count of matching items.
@@ -72,13 +72,13 @@ The server runs up to 64 request workers and admits up to 256 additional queued 
 
 ## Data
 
-After its first load, `program.json` contains an `events` array. Each newly created event records `creatorId` (the creator's GitHub user ID) and `creatorLogin` and has its own:
+After its first load, `program.json` contains an `events` array. Each newly created event records `creatorId` (the creator's GitHub user ID), `creatorLogin`, and an `authorizedUsers` array of `{ "id": "...", "login": "..." }` GitHub accounts. The creator has access implicitly. Each event also has its own:
 
 - `program`: scheduled items, including location, date, start/end time, contributors, languages, and likes.
 - `topics`: unscheduled topic ideas, with descriptions, contributors, languages, and likes.
 - `locations`: locations with descriptions and optional capacity and facilities.
 
-Changes made in the interface are written back to `program.json`. New events start with their own empty program, topics, and locations. Existing events without a `creatorId` remain readable after sign-in but cannot be renamed or deleted until you assign the correct GitHub user ID. Keep a backup before manually editing or replacing this file.
+Changes made in the interface are written back to `program.json`. New events start with their own empty program, topics, and locations. Existing events without a `creatorId` are not visible to signed-in accounts until you assign the correct GitHub user ID. Keep a backup before manually editing or replacing this file.
 
 ## API
 
@@ -93,6 +93,8 @@ The server exposes these JSON endpoints for the interface:
 | `GET` | `/api/events` | List events for a signed-in user. |
 | `GET` | `/api/event?eventId=...` | Load an event and its program, topics, and locations. |
 | `POST` | `/api/events` | Create an empty event owned by the signed-in account. |
+| `POST` | `/api/events/authorized-users` | Resolve a GitHub login and grant it access to an event (creator only). |
+| `DELETE` | `/api/events/authorized-users` | Revoke an authorized GitHub account (creator only). |
 | `PUT` | `/api/events` | Rename an event when the session user is its creator. |
 | `DELETE` | `/api/events` | Delete an event and its data when the session user is its creator. |
 | `POST` | `/api/like` | Add or remove a user's like on a program item or topic. |
@@ -102,6 +104,6 @@ The server exposes these JSON endpoints for the interface:
 | `POST` | `/api/locations` | Create a location. |
 | `PUT` | `/api/locations` | Edit a location and update program references when it is renamed. |
 
-All API endpoints require a valid GitHub session. Program, topic, and location requests accept an `eventId` query parameter to select which event they change. Event names must be unique (case-insensitively); event contents are kept separate.
+All API endpoints require a valid GitHub session. `/api/events` only lists accessible events; direct event reads and writes also check access server-side. The creator can enter a GitHub login in the event chooser; the server resolves it through GitHub and stores its stable user ID in `authorizedUsers`. Program, topic, and location requests accept an `eventId` query parameter to select which accessible event they change. Event names must be unique (case-insensitively); event contents are kept separate.
 
 The server binds to localhost by default. Binding to another host may expose the app and its writable data file to other machines on the network.

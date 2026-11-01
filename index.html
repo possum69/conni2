@@ -656,6 +656,16 @@
               <button id="delete-event-button" type="button" data-i18n="deleteEvent">Delete event</button>
               <p id="event-manage-status" class="setup-status" role="status" aria-live="polite"></p>
             </form>
+            <section class="authorized-users-panel" aria-labelledby="authorized-users-heading">
+              <h3 id="authorized-users-heading" data-i18n="authorizedUsers">Authorized GitHub accounts</h3>
+              <form id="authorized-user-form">
+                <label for="authorized-user-login" data-i18n="githubUsername">GitHub username</label>
+                <input id="authorized-user-login" name="login" type="text" maxlength="39" autocomplete="off" required />
+                <button type="submit" data-i18n="addAuthorizedUser">Grant access</button>
+              </form>
+              <ul id="authorized-user-list"></ul>
+              <p id="authorized-user-status" class="setup-status" role="status" aria-live="polite"></p>
+            </section>
           </details>
           <details>
             <summary data-i18n="createEvent">Create a new event</summary>
@@ -860,6 +870,7 @@
         en: {
           openSpace: 'Open Space', welcome: 'Welcome to Open Space!', pageLanguage: 'Language:', yourName: 'Your name:', enterName: 'Enter your name', saved: 'Saved',
           githubSignIn: 'Sign in to Open Space', githubLogin: 'Continue with GitHub', signOut: 'Sign out', authLoadFailed: 'Could not verify the GitHub session.',
+          authorizedUsers: 'Authorized GitHub accounts', githubUsername: 'GitHub username', addAuthorizedUser: 'Grant access', removeAuthorizedUser: 'Remove access', authorizedUserAdded: 'Access granted.', authorizedUserRemoved: 'Access removed.', authorizedUserFailed: 'Could not update authorized accounts.', eventCreatedAddUsers: 'Event created. Add accounts or open the event.',
           profileSetup: 'Tell us about yourself', favoriteLanguage: 'Favorite language', continueToEvents: 'Continue', chooseEvent: 'Choose an event',
           selectEvent: 'Select an event', openEvent: 'Open event', createEvent: 'Create a new event', eventName: 'Event name', addEvent: 'Create event',
           currentEvent: 'Current event:', switchEvent: 'Switch event', manageEvent: 'Manage event', saveEvent: 'Save event', deleteEvent: 'Delete event',
@@ -1255,7 +1266,46 @@
         const canManage = event && event.creatorId === currentUserId;
         panel.hidden = !canManage;
         document.getElementById('event-manage-status').textContent = '';
-        if (canManage) document.getElementById('managed-event-name').value = event.name;
+        if (canManage) {
+          document.getElementById('managed-event-name').value = event.name;
+          renderAuthorizedUsers();
+        }
+      }
+
+      function renderAuthorizedUsers() {
+        const event = selectedEvent();
+        const list = document.getElementById('authorized-user-list');
+        list.replaceChildren();
+        (event?.authorizedUsers || []).forEach(user => {
+          const item = document.createElement('li');
+          const login = document.createElement('span');
+          login.textContent = `@${user.login}`;
+          const removeButton = document.createElement('button');
+          removeButton.type = 'button';
+          removeButton.textContent = translate('removeAuthorizedUser');
+          removeButton.addEventListener('click', () => removeAuthorizedUser(user.id));
+          item.append(login, removeButton);
+          list.append(item);
+        });
+      }
+
+      async function removeAuthorizedUser(userId) {
+        const status = document.getElementById('authorized-user-status');
+        status.textContent = '';
+        try {
+          const response = await fetch('/api/events/authorized-users', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ eventId: selectedEvent().id, userId })
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || translate('authorizedUserFailed'));
+          selectedEvent().authorizedUsers = result.authorizedUsers;
+          renderAuthorizedUsers();
+          status.textContent = translate('authorizedUserRemoved');
+        } catch (error) {
+          status.textContent = error.message || translate('authorizedUserFailed');
+        }
       }
 
       async function initializeEventFlow() {
@@ -1285,10 +1335,11 @@
             const result = await response.json();
             if (!response.ok) throw new Error(result.error || translate('eventSaveFailed'));
             form.reset();
-            try {
-              localStorage.setItem('conni2-event-id', result.event.id);
-            } catch {}
-            await activateEvent(result.event);
+            await loadEventChoices();
+            document.getElementById('event-select').value = result.event.id;
+            updateEventManagementForm();
+            document.getElementById('event-manage-panel').open = true;
+            document.getElementById('event-manage-status').textContent = translate('eventCreatedAddUsers');
           } catch (error) {
             status.textContent = error.message || translate('eventSaveFailed');
           } finally {
@@ -1349,6 +1400,35 @@
             await loadEventChoices();
           } catch (error) {
             status.textContent = error.message || translate('eventSaveFailed');
+          } finally {
+            button.disabled = false;
+          }
+        });
+
+        document.getElementById('authorized-user-form').addEventListener('submit', async event => {
+          event.preventDefault();
+          const form = event.currentTarget;
+          const button = form.querySelector('button[type="submit"]');
+          const status = document.getElementById('authorized-user-status');
+          button.disabled = true;
+          status.textContent = '';
+          try {
+            const response = await fetch('/api/events/authorized-users', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                eventId: selectedEvent().id,
+                login: new FormData(form).get('login')
+              })
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || translate('authorizedUserFailed'));
+            selectedEvent().authorizedUsers = result.authorizedUsers;
+            renderAuthorizedUsers();
+            form.reset();
+            status.textContent = translate('authorizedUserAdded');
+          } catch (error) {
+            status.textContent = error.message || translate('authorizedUserFailed');
           } finally {
             button.disabled = false;
           }

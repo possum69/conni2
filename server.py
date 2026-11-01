@@ -10,9 +10,10 @@ from concurrent.futures import ThreadPoolExecutor
 from http.cookies import SimpleCookie
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 from uuid import uuid4
 
+import requests
 from authlib.integrations.requests_client import OAuth2Session
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -71,6 +72,15 @@ class ConniHandler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
+    def send_head(self):
+        served_path = Path(self.translate_path(self.path)).resolve()
+        data_path = DATA_FILE.resolve()
+        root_path = ROOT.resolve()
+        if served_path == data_path or (served_path.parent == root_path and served_path.name.startswith(".program-")):
+            self.send_error(404, "File not found")
+            return None
+        return super().send_head()
+
     def log_request(self, code="-", size="-"):
         if urlparse(self.path).path == "/auth/callback":
             return
@@ -95,23 +105,24 @@ class ConniHandler(SimpleHTTPRequestHandler):
             super().do_GET()
             return
 
-        if self.require_authenticated_user() is None:
+        user = self.require_authenticated_user()
+        if user is None:
             return
 
         try:
             data = self.read_data()
             if request_path == "/api/events":
                 self.send_json(200, {
-                    "events": [
-                        {"id": event["id"], "name": event["name"], "creatorId": event.get("creatorId")}
-                        for event in data["events"]
-                    ]
+                    "events": [self.event_summary(event, user) for event in data["events"] if self.can_access_event(event, user)]
                 })
                 return
 
             event = self.find_event(data, self.requested_event_id())
             if event is None:
                 self.send_json(404, {"error": "Event not found"})
+                return
+            if not self.can_access_event(event, user):
+                self.send_json(403, {"error": "You are not authorized for this event"})
                 return
             self.send_json(200, {"event": event})
         except (json.JSONDecodeError, UnicodeDecodeError, OSError):
@@ -281,12 +292,35 @@ class ConniHandler(SimpleHTTPRequestHandler):
             return data
 
     def read_event_data(self):
+        user = self.authenticated_user()
         data = self.read_data()
         event = self.find_event(data, self.requested_event_id())
         if event is None:
             self.send_json(404, {"error": "Event not found"})
             return None, None
+        if user is None:
+            self.send_json(401, {"error": "Sign in required"})
+            return None, None
+        if not self.can_access_event(event, user):
+            self.send_json(403, {"error": "You are not authorized for this event"})
+            return None, None
         return data, event
+
+    @staticmethod
+    def can_access_event(event, user):
+        if str(event.get("creatorId", "")) == user["id"]:
+            return True
+        return any(
+            isinstance(authorized_user, dict) and authorized_user.get("id") == user["id"]
+            for authorized_user in event.get("authorizedUsers", [])
+        )
+
+    @classmethod
+    def event_summary(cls, event, user):
+        summary = {"id": event["id"], "name": event["name"], "creatorId": event.get("creatorId")}
+        if cls.is_event_creator(event, user):
+            summary["authorizedUsers"] = event.get("authorizedUsers", [])
+        return summary
 
     @serialize_data_mutation
     def do_POST(self):
@@ -295,7 +329,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
         if request_path == "/auth/logout":
             self.clear_session()
             return
-        if request_path not in ("/api/events", "/api/like", "/api/topics", "/api/locations"):
+        if request_path not in ("/api/events", "/api/events/authorized-users", "/api/like", "/api/topics", "/api/locations"):
             self.send_json(404, {"error": "Not found"})
             return
         user = self.require_authenticated_user()
@@ -315,6 +349,9 @@ class ConniHandler(SimpleHTTPRequestHandler):
 
             if request_path == "/api/events":
                 self.create_event(request, user)
+                return
+            if request_path == "/api/events/authorized-users":
+                self.add_authorized_user(request, user)
                 return
             data, event = self.read_event_data()
             if event is None:
@@ -373,7 +410,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
     @serialize_data_mutation
     def do_DELETE(self):
         request_path = urlparse(self.path).path
-        if request_path not in ("/api/items", "/api/events"):
+        if request_path not in ("/api/items", "/api/events", "/api/events/authorized-users"):
             self.send_json(404, {"error": "Not found"})
             return
         user = self.require_authenticated_user()
@@ -393,6 +430,9 @@ class ConniHandler(SimpleHTTPRequestHandler):
 
             if request_path == "/api/events":
                 self.delete_event(request, user)
+                return
+            if request_path == "/api/events/authorized-users":
+                self.remove_authorized_user(request, user)
                 return
 
             item_type = request.get("itemType")
@@ -582,6 +622,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
             "name": name.strip(),
             "creatorId": user["id"],
             "creatorLogin": user["login"],
+            "authorizedUsers": [],
             "program": [],
             "topics": [],
             "locations": [],
@@ -646,6 +687,86 @@ class ConniHandler(SimpleHTTPRequestHandler):
     @staticmethod
     def is_event_creator(event, user):
         return str(event.get("creatorId", "")) == user["id"]
+
+    def add_authorized_user(self, request, user):
+        event_id = request.get("eventId")
+        login = request.get("login")
+        if not isinstance(event_id, str) or not event_id:
+            self.send_json(400, {"error": "Invalid event"})
+            return
+        if not isinstance(login, str) or not login.strip() or len(login.strip()) > 39:
+            self.send_json(400, {"error": "Enter a valid GitHub username"})
+            return
+
+        data = self.read_data()
+        event = self.find_event(data, event_id)
+        if event is None:
+            self.send_json(404, {"error": "Event not found"})
+            return
+        if not self.is_event_creator(event, user):
+            self.send_json(403, {"error": "Only the event creator can manage authorized users"})
+            return
+
+        try:
+            response = requests.get(
+                f"https://api.github.com/users/{quote(login.strip(), safe='')}",
+                headers={"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "OpenSpace"},
+                timeout=5,
+            )
+        except requests.RequestException:
+            self.send_json(503, {"error": "Could not reach GitHub to verify that account"})
+            return
+        if response.status_code == 404:
+            self.send_json(404, {"error": "GitHub account not found"})
+            return
+        if response.status_code != 200:
+            self.send_json(503, {"error": "GitHub could not verify that account right now"})
+            return
+
+        profile = response.json()
+        if not isinstance(profile.get("id"), int) or not isinstance(profile.get("login"), str):
+            self.send_json(502, {"error": "GitHub returned an invalid account"})
+            return
+        authorized_user = {"id": str(profile["id"]), "login": profile["login"]}
+        if authorized_user["id"] == user["id"]:
+            self.send_json(409, {"error": "The event creator is already authorized"})
+            return
+
+        authorized_users = event.setdefault("authorizedUsers", [])
+        if any(entry.get("id") == authorized_user["id"] for entry in authorized_users if isinstance(entry, dict)):
+            self.send_json(409, {"error": "That account is already authorized"})
+            return
+        authorized_users.append(authorized_user)
+        self.write_data(data)
+        self.send_json(201, {"authorizedUsers": authorized_users})
+
+    def remove_authorized_user(self, request, user):
+        event_id = request.get("eventId")
+        user_id = request.get("userId")
+        if not isinstance(event_id, str) or not event_id:
+            self.send_json(400, {"error": "Invalid event"})
+            return
+        if not isinstance(user_id, str) or not user_id:
+            self.send_json(400, {"error": "Invalid GitHub user"})
+            return
+
+        data = self.read_data()
+        event = self.find_event(data, event_id)
+        if event is None:
+            self.send_json(404, {"error": "Event not found"})
+            return
+        if not self.is_event_creator(event, user):
+            self.send_json(403, {"error": "Only the event creator can manage authorized users"})
+            return
+
+        authorized_users = event.setdefault("authorizedUsers", [])
+        updated_users = [entry for entry in authorized_users if not isinstance(entry, dict) or entry.get("id") != user_id]
+        if len(updated_users) == len(authorized_users):
+            self.send_json(404, {"error": "Authorized account not found"})
+            return
+        event["authorizedUsers"] = updated_users
+        self.write_data(data)
+        self.send_json(200, {"authorizedUsers": updated_users})
 
     def create_topic(self, request, data, event):
         name = request.get("name")

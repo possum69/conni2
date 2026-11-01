@@ -31,6 +31,23 @@ Stop the server with `Ctrl+C`.
 
 Run the test suite with `py -m unittest discover -s tests` on Windows or `python3 -m unittest discover -s tests` elsewhere.
 
+### Browser tests with Robot Framework
+
+Install the browser-test dependencies with `py -m pip install -r requirements-test.txt`, then start the app in another PowerShell window with local bypass enabled:
+
+```powershell
+$env:LOCAL_AUTH_BYPASS = "true"
+py src/server.py
+```
+
+With Microsoft Edge installed, run the end-to-end tests from the repository root:
+
+```powershell
+py -m robot --variable BASE_URL:http://127.0.0.1:8000/ --outputdir robot-results tests/robot
+```
+
+The suite covers local sign-in, event creation/rename/deletion, location creation/editing, topic creation/editing/deletion as both contributors, scheduling and rescheduling, and the available program/topic filters and views. It creates a uniquely named event and deletes it when the test succeeds. If a test fails before cleanup, remove its `RF Event ...` event in the UI. Topics use list cards; the calendar view is available for program items only.
+
 `LOCAL_AUTH_BYPASS=true` signs local loopback requests in as a development user without GitHub. On first visit, enter a name; it is saved in a local-only cookie and used for likes. Use **Change local name** to update it. The bypass is ignored on Render and for non-loopback clients. Events created in this mode use the `local-development` creator ID; assign the real GitHub creator ID before moving those events to production.
 
 ## GitHub OAuth

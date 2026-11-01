@@ -379,6 +379,40 @@ class ConniHandler(SimpleHTTPRequestHandler):
             summary["authorizedUsers"] = event.get("authorizedUsers", [])
         return summary
 
+    @classmethod
+    def event_contributor_logins(cls, event, user):
+        logins = set()
+        creator_login = event.get("creatorLogin")
+        if isinstance(creator_login, str) and creator_login.strip():
+            logins.add(creator_login.strip().casefold())
+        if cls.is_event_creator(event, user) or user.get("local"):
+            if user.get("login"):
+                logins.add(user["login"].strip().casefold())
+
+        for authorized_user in event.get("authorizedUsers", []) or []:
+            if isinstance(authorized_user, str):
+                login = authorized_user
+            elif isinstance(authorized_user, dict):
+                login = authorized_user.get("login", "")
+                if not login and str(authorized_user.get("id", "")) == user.get("id"):
+                    login = user.get("login", "")
+            else:
+                continue
+            if isinstance(login, str) and login.strip():
+                logins.add(login.strip().casefold())
+        return logins
+
+    @classmethod
+    def valid_event_contributors(cls, contributors, event, user, existing=()):
+        allowed = cls.event_contributor_logins(event, user)
+        existing_names = {name.strip().casefold() for name in existing if isinstance(name, str)}
+        return all(
+            not contributor.strip()
+            or contributor.strip().casefold() in allowed
+            or contributor.strip().casefold() in existing_names
+            for contributor in contributors
+        )
+
     @serialize_data_mutation
     def do_POST(self):
         """Handle like updates and event, topic, or location creation requests."""
@@ -417,7 +451,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
             if event is None:
                 return
             if request_path == "/api/topics":
-                self.create_topic(request, data, event)
+                self.create_topic(request, data, event, user)
                 return
             if request_path == "/api/locations":
                 self.create_location(request, data, event)
@@ -594,6 +628,9 @@ class ConniHandler(SimpleHTTPRequestHandler):
                 return
 
             item = source_items[source_index]
+            if not self.valid_event_contributors(contributors, event, user, item.get("contributers", [])):
+                self.send_json(400, {"error": "Contributors must be authorized event members"})
+                return
             target_items = event.setdefault(target_type, [])
             normalized_name = name.strip().casefold()
             if any(
@@ -830,7 +867,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
         self.write_data(data)
         self.send_json(200, {"authorizedUsers": updated_users})
 
-    def create_topic(self, request, data, event):
+    def create_topic(self, request, data, event, user):
         name = request.get("name")
         description = request.get("description")
         contributors = request.get("contributors", [])
@@ -844,6 +881,9 @@ class ConniHandler(SimpleHTTPRequestHandler):
             return
         if not self.valid_string_list(contributors, max_items=30, max_length=120):
             self.send_json(400, {"error": "Invalid contributor list"})
+            return
+        if not self.valid_event_contributors(contributors, event, user):
+            self.send_json(400, {"error": "Contributors must be authorized event members"})
             return
         if not self.valid_string_list(languages, max_items=20, max_length=80):
             self.send_json(400, {"error": "Invalid language list"})

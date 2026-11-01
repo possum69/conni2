@@ -65,6 +65,7 @@ The server runs up to 64 request workers and admits up to 256 additional queued 
 ## Features
 
 - Sign in with GitHub, then choose an event you can access or create one. The creator can grant or revoke access for other GitHub accounts, and only the creator can rename or delete the event.
+- Assign contributors from the event creator and authorized accounts; the server rejects new contributor names outside that list.
 - Keep each event's locations, scheduled program, and topic ideas separate.
 - Browse the program in list or calendar view; filter by language, likes, contributions, or search terms and see the matching item count.
 - Browse and create topics, edit item details, and schedule a topic in the program; the topic view shows the count of matching items.

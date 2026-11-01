@@ -1,1 +1,3 @@
-# OpenSpace uses only the Python standard library.
+Authlib>=1.3,<2.0
+itsdangerous>=2.1,<3.0
+requests>=2.31,<3.0

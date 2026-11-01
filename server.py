@@ -1,15 +1,20 @@
 import argparse
 import json
 import os
+import secrets
 import tempfile
 import threading
 from datetime import datetime
 from functools import wraps
 from concurrent.futures import ThreadPoolExecutor
+from http.cookies import SimpleCookie
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 from uuid import uuid4
+
+from authlib.integrations.requests_client import OAuth2Session
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 
 ROOT = Path(__file__).resolve().parent
@@ -66,10 +71,31 @@ class ConniHandler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
+    def log_request(self, code="-", size="-"):
+        if urlparse(self.path).path == "/auth/callback":
+            return
+        super().log_request(code, size)
+
     def do_GET(self):
         request_path = urlparse(self.path).path
+        if request_path == "/auth/login":
+            self.start_github_login()
+            return
+        if request_path == "/auth/callback":
+            self.finish_github_login()
+            return
+        if request_path == "/api/me":
+            user = self.authenticated_user()
+            if user is None:
+                self.send_json(401, {"error": "Sign in required"})
+            else:
+                self.send_json(200, {"user": user})
+            return
         if request_path not in ("/api/events", "/api/event"):
             super().do_GET()
+            return
+
+        if self.require_authenticated_user() is None:
             return
 
         try:
@@ -77,7 +103,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
             if request_path == "/api/events":
                 self.send_json(200, {
                     "events": [
-                        {"id": event["id"], "name": event["name"], "creatorName": event.get("creatorName")}
+                        {"id": event["id"], "name": event["name"], "creatorId": event.get("creatorId")}
                         for event in data["events"]
                     ]
                 })
@@ -98,6 +124,146 @@ class ConniHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    @staticmethod
+    def oauth_configuration():
+        client_id = os.environ.get("GITHUB_CLIENT_ID")
+        client_secret = os.environ.get("GITHUB_CLIENT_SECRET")
+        redirect_uri = os.environ.get("GITHUB_REDIRECT_URI")
+        session_secret = os.environ.get("SESSION_SECRET")
+        if not all((client_id, client_secret, redirect_uri)) or not session_secret or len(session_secret) < 32:
+            return None
+        return client_id, client_secret, redirect_uri, session_secret
+
+    @staticmethod
+    def session_serializer():
+        secret = os.environ.get("SESSION_SECRET", "")
+        if len(secret) < 32:
+            return None
+        return URLSafeTimedSerializer(secret, salt="conni2-github-session")
+
+    def cookie_value(self, cookie_name):
+        try:
+            cookies = SimpleCookie(self.headers.get("Cookie", ""))
+            return cookies[cookie_name].value if cookie_name in cookies else None
+        except Exception:
+            return None
+
+    def authenticated_user(self):
+        serializer = self.session_serializer()
+        cookie_value = self.cookie_value("conni2_session")
+        if serializer is None or not cookie_value:
+            return None
+        try:
+            user = serializer.loads(cookie_value, max_age=604800)
+        except (BadSignature, SignatureExpired):
+            return None
+        if not isinstance(user, dict) or not isinstance(user.get("id"), str) or not isinstance(user.get("login"), str):
+            return None
+        return user
+
+    def require_authenticated_user(self):
+        user = self.authenticated_user()
+        if user is None:
+            self.send_json(401, {"error": "Sign in required"})
+        return user
+
+    def secure_cookie(self):
+        redirect_uri = os.environ.get("GITHUB_REDIRECT_URI", "")
+        return "; Secure" if os.environ.get("RENDER") or redirect_uri.startswith("https://") else ""
+
+    def redirect(self, location, cookie_header=None):
+        self.send_response(303)
+        self.send_header("Location", location)
+        if cookie_header:
+            self.send_header("Set-Cookie", cookie_header)
+        self.end_headers()
+
+    def start_github_login(self):
+        configuration = self.oauth_configuration()
+        if configuration is None:
+            self.send_json(503, {"error": "GitHub OAuth is not configured on the server"})
+            return
+
+        client_id, client_secret, redirect_uri, session_secret = configuration
+        state = secrets.token_urlsafe(32)
+        code_verifier = secrets.token_urlsafe(64)
+        oauth = OAuth2Session(
+            client_id,
+            client_secret,
+            scope="read:user",
+            redirect_uri=redirect_uri,
+            token_endpoint_auth_method="client_secret_post",
+            code_challenge_method="S256",
+        )
+        authorization_url, _ = oauth.create_authorization_url(
+            "https://github.com/login/oauth/authorize",
+            state=state,
+            code_verifier=code_verifier,
+        )
+        state_cookie = URLSafeTimedSerializer(session_secret, salt="conni2-github-state").dumps({
+            "state": state,
+            "codeVerifier": code_verifier,
+        })
+        cookie = f"conni2_oauth_state={state_cookie}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600{self.secure_cookie()}"
+        self.redirect(authorization_url, cookie)
+
+    def finish_github_login(self):
+        configuration = self.oauth_configuration()
+        cookie = self.cookie_value("conni2_oauth_state")
+        query = parse_qs(urlparse(self.path).query)
+        state = query.get("state", [""])[0]
+        code = query.get("code", [""])[0]
+        if configuration is None or not cookie or not state or not code:
+            self.send_json(400, {"error": "GitHub sign-in could not be completed"})
+            return
+
+        client_id, client_secret, redirect_uri, session_secret = configuration
+        try:
+            state_data = URLSafeTimedSerializer(session_secret, salt="conni2-github-state").loads(cookie, max_age=600)
+            expected_state = state_data.get("state", "")
+            code_verifier = state_data.get("codeVerifier", "")
+            if not secrets.compare_digest(state, expected_state) or not code_verifier:
+                raise BadSignature("Invalid OAuth state")
+
+            oauth = OAuth2Session(
+                client_id,
+                client_secret,
+                scope="read:user",
+                redirect_uri=redirect_uri,
+                token_endpoint_auth_method="client_secret_post",
+                code_challenge_method="S256",
+            )
+            token = oauth.fetch_token(
+                "https://github.com/login/oauth/access_token",
+                code=code,
+                code_verifier=code_verifier,
+            )
+            oauth.token = token
+            profile = oauth.get("https://api.github.com/user").json()
+            if not isinstance(profile.get("id"), int) or not isinstance(profile.get("login"), str):
+                raise ValueError("Invalid GitHub profile")
+            user = {"id": str(profile["id"]), "login": profile["login"]}
+            session_cookie = URLSafeTimedSerializer(session_secret, salt="conni2-github-session").dumps(user)
+            session_header = f"conni2_session={session_cookie}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800{self.secure_cookie()}"
+            clear_state = f"conni2_oauth_state=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0{self.secure_cookie()}"
+            self.send_response(303)
+            self.send_header("Location", "/")
+            self.send_header("Set-Cookie", session_header)
+            self.send_header("Set-Cookie", clear_state)
+            self.end_headers()
+        except (BadSignature, SignatureExpired, ValueError, KeyError, OSError):
+            self.send_json(400, {"error": "GitHub sign-in could not be completed"})
+        except Exception:
+            self.send_json(502, {"error": "Could not verify the GitHub account"})
+
+    def clear_session(self):
+        self.send_response(204)
+        self.send_header(
+            "Set-Cookie",
+            f"conni2_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0{self.secure_cookie()}",
+        )
+        self.end_headers()
 
     @staticmethod
     def find_event(data, event_id):
@@ -126,8 +292,14 @@ class ConniHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         """Handle like updates and event, topic, or location creation requests."""
         request_path = urlparse(self.path).path
+        if request_path == "/auth/logout":
+            self.clear_session()
+            return
         if request_path not in ("/api/events", "/api/like", "/api/topics", "/api/locations"):
             self.send_json(404, {"error": "Not found"})
+            return
+        user = self.require_authenticated_user()
+        if user is None:
             return
 
         try:
@@ -142,7 +314,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
                 return
 
             if request_path == "/api/events":
-                self.create_event(request)
+                self.create_event(request, user)
                 return
             data, event = self.read_event_data()
             if event is None:
@@ -156,7 +328,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
 
             item_type = request.get("itemType")
             item_name = request.get("itemName")
-            user_name = request.get("userName")
+            user_name = user["login"]
             liked = request.get("liked")
 
             if item_type not in ("program", "topics"):
@@ -204,6 +376,9 @@ class ConniHandler(SimpleHTTPRequestHandler):
         if request_path not in ("/api/items", "/api/events"):
             self.send_json(404, {"error": "Not found"})
             return
+        user = self.require_authenticated_user()
+        if user is None:
+            return
 
         try:
             request_size = int(self.headers.get("Content-Length", "0"))
@@ -217,7 +392,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
                 return
 
             if request_path == "/api/events":
-                self.delete_event(request)
+                self.delete_event(request, user)
                 return
 
             item_type = request.get("itemType")
@@ -256,6 +431,9 @@ class ConniHandler(SimpleHTTPRequestHandler):
         if request_path not in ("/api/events", "/api/items", "/api/locations"):
             self.send_json(404, {"error": "Not found"})
             return
+        user = self.require_authenticated_user()
+        if user is None:
+            return
 
         try:
             request_size = int(self.headers.get("Content-Length", "0"))
@@ -269,7 +447,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
                 return
 
             if request_path == "/api/events":
-                self.update_event(request)
+                self.update_event(request, user)
                 return
 
             data, event = self.read_event_data()
@@ -387,14 +565,10 @@ class ConniHandler(SimpleHTTPRequestHandler):
         except OSError:
             self.send_json(500, {"error": "Could not save program.json"})
 
-    def create_event(self, request):
+    def create_event(self, request, user):
         name = request.get("name")
-        creator_name = request.get("creatorName")
         if not isinstance(name, str) or not name.strip() or len(name.strip()) > 160:
             self.send_json(400, {"error": "An event name of 1 to 160 characters is required"})
-            return
-        if not isinstance(creator_name, str) or not creator_name.strip() or len(creator_name) > 120:
-            self.send_json(400, {"error": "A creator name is required"})
             return
 
         data = self.read_data()
@@ -406,7 +580,8 @@ class ConniHandler(SimpleHTTPRequestHandler):
         event = {
             "id": uuid4().hex,
             "name": name.strip(),
-            "creatorName": creator_name.strip(),
+            "creatorId": user["id"],
+            "creatorLogin": user["login"],
             "program": [],
             "topics": [],
             "locations": [],
@@ -415,10 +590,9 @@ class ConniHandler(SimpleHTTPRequestHandler):
         self.write_data(data)
         self.send_json(201, {"event": event})
 
-    def update_event(self, request):
+    def update_event(self, request, user):
         event_id = request.get("eventId")
         name = request.get("name")
-        creator_name = request.get("creatorName")
         if not isinstance(event_id, str) or not event_id:
             self.send_json(400, {"error": "Invalid event"})
             return
@@ -431,7 +605,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
         if event is None:
             self.send_json(404, {"error": "Event not found"})
             return
-        if not self.is_event_creator(event, creator_name):
+        if not self.is_event_creator(event, user):
             self.send_json(403, {"error": "Only the event creator can rename this event"})
             return
         normalized_name = name.strip().casefold()
@@ -446,9 +620,8 @@ class ConniHandler(SimpleHTTPRequestHandler):
         self.write_data(data)
         self.send_json(200, {"event": event})
 
-    def delete_event(self, request):
+    def delete_event(self, request, user):
         event_id = request.get("eventId")
-        creator_name = request.get("creatorName")
         if not isinstance(event_id, str) or not event_id:
             self.send_json(400, {"error": "Invalid event"})
             return
@@ -462,7 +635,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
             self.send_json(404, {"error": "Event not found"})
             return
 
-        if not self.is_event_creator(data["events"][event_index], creator_name):
+        if not self.is_event_creator(data["events"][event_index], user):
             self.send_json(403, {"error": "Only the event creator can delete this event"})
             return
 
@@ -471,14 +644,8 @@ class ConniHandler(SimpleHTTPRequestHandler):
         self.send_json(200, {"event": deleted_event})
 
     @staticmethod
-    def is_event_creator(event, creator_name):
-        event_creator = event.get("creatorName")
-        return (
-            isinstance(creator_name, str)
-            and bool(creator_name.strip())
-            and isinstance(event_creator, str)
-            and creator_name.strip().casefold() == event_creator.strip().casefold()
-        )
+    def is_event_creator(event, user):
+        return str(event.get("creatorId", "")) == user["id"]
 
     def create_topic(self, request, data, event):
         name = request.get("name")

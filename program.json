@@ -2,7 +2,7 @@
     "events": [
         {
             "id": "39cb0720782f4253a6e7167443a4aaef",
-            "name": "OpenSpace 1",
+            "name": "An unexpected Meeting",
             "creatorName": "B. Baggins",
             "program": [
                 {
@@ -49,14 +49,6 @@
                     "capacity": 15
                 }
             ]
-        },
-        {
-            "id": "1ae0be767e434ea6bf2e1eb0525844c8",
-            "name": "SemWo",
-            "creatorName": "B. Mattern",
-            "program": [],
-            "topics": [],
-            "locations": []
         }
     ]
 }

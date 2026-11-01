@@ -349,12 +349,28 @@ class ConniHandler(SimpleHTTPRequestHandler):
     def can_access_event(event, user):
         if user.get("local"):
             return True
-        if str(event.get("creatorId", "")) == user["id"]:
+        if ConniHandler.is_event_creator(event, user):
             return True
         return any(
-            isinstance(authorized_user, dict) and authorized_user.get("id") == user["id"]
-            for authorized_user in event.get("authorizedUsers", [])
+            ConniHandler.matches_github_account(authorized_user, user)
+            for authorized_user in event.get("authorizedUsers", []) or []
         )
+
+    @staticmethod
+    def matches_github_account(entry, user):
+        if isinstance(entry, str):
+            return entry.strip().casefold() == user.get("login", "").casefold()
+        if not isinstance(entry, dict):
+            return False
+        entry_id = entry.get("id")
+        if entry_id is not None:
+            normalized_id = str(entry_id)
+            if normalized_id == user.get("id"):
+                return True
+            if normalized_id.isdecimal():
+                return False
+        login = entry.get("login")
+        return isinstance(login, str) and login.strip().casefold() == user.get("login", "").casefold()
 
     @classmethod
     def event_summary(cls, event, user):
@@ -730,7 +746,17 @@ class ConniHandler(SimpleHTTPRequestHandler):
 
     @staticmethod
     def is_event_creator(event, user):
-        return user.get("local", False) or str(event.get("creatorId", "")) == user["id"]
+        if user.get("local", False):
+            return True
+        creator_id = event.get("creatorId")
+        if creator_id is not None:
+            normalized_id = str(creator_id)
+            if normalized_id == user.get("id"):
+                return True
+            if normalized_id.isdecimal():
+                return False
+        creator_login = event.get("creatorLogin")
+        return isinstance(creator_login, str) and creator_login.strip().casefold() == user.get("login", "").casefold()
 
     def add_authorized_user(self, request, user):
         event_id = request.get("eventId")
@@ -777,7 +803,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
             return
 
         authorized_users = event.setdefault("authorizedUsers", [])
-        if any(entry.get("id") == authorized_user["id"] for entry in authorized_users if isinstance(entry, dict)):
+        if any(self.matches_github_account(entry, authorized_user) for entry in authorized_users):
             self.send_json(409, {"error": "That account is already authorized"})
             return
         authorized_users.append(authorized_user)
@@ -787,10 +813,11 @@ class ConniHandler(SimpleHTTPRequestHandler):
     def remove_authorized_user(self, request, user):
         event_id = request.get("eventId")
         user_id = request.get("userId")
+        login = request.get("login")
         if not isinstance(event_id, str) or not event_id:
             self.send_json(400, {"error": "Invalid event"})
             return
-        if not isinstance(user_id, str) or not user_id:
+        if (not isinstance(user_id, str) or not user_id) and (not isinstance(login, str) or not login.strip()):
             self.send_json(400, {"error": "Invalid GitHub user"})
             return
 
@@ -804,7 +831,13 @@ class ConniHandler(SimpleHTTPRequestHandler):
             return
 
         authorized_users = event.setdefault("authorizedUsers", [])
-        updated_users = [entry for entry in authorized_users if not isinstance(entry, dict) or entry.get("id") != user_id]
+        updated_users = [
+            entry for entry in authorized_users
+            if not (
+                (isinstance(user_id, str) and isinstance(entry, dict) and str(entry.get("id", "")) == user_id)
+                or (isinstance(login, str) and self.matches_github_account(entry, {"id": "", "login": login}))
+            )
+        ]
         if len(updated_users) == len(authorized_users):
             self.send_json(404, {"error": "Authorized account not found"})
             return

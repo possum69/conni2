@@ -1291,26 +1291,28 @@
         const list = document.getElementById('authorized-user-list');
         list.replaceChildren();
         (event?.authorizedUsers || []).forEach(user => {
+          const login = typeof user === 'string' ? user : user.login;
+          const userId = typeof user === 'string' ? '' : user.id;
           const item = document.createElement('li');
-          const login = document.createElement('span');
-          login.textContent = `@${user.login}`;
+          const loginLabel = document.createElement('span');
+          loginLabel.textContent = `@${login}`;
           const removeButton = document.createElement('button');
           removeButton.type = 'button';
           removeButton.textContent = translate('removeAuthorizedUser');
-          removeButton.addEventListener('click', () => removeAuthorizedUser(user.id));
-          item.append(login, removeButton);
+          removeButton.addEventListener('click', () => removeAuthorizedUser(userId, login));
+          item.append(loginLabel, removeButton);
           list.append(item);
         });
       }
 
-      async function removeAuthorizedUser(userId) {
+      async function removeAuthorizedUser(userId, login) {
         const status = document.getElementById('authorized-user-status');
         status.textContent = '';
         try {
           const response = await fetch('/api/events/authorized-users', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ eventId: selectedEvent().id, userId })
+            body: JSON.stringify({ eventId: selectedEvent().id, userId, login })
           });
           const result = await response.json();
           if (!response.ok) throw new Error(result.error || translate('authorizedUserFailed'));

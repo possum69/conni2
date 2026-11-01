@@ -36,11 +36,11 @@ The default Blueprint uses Render's free plan. Its filesystem is ephemeral, so c
 
 For a small event with roughly 250 users, run one server process on a machine reachable by the attendees. To accept connections from the local network, start it with `--host 0.0.0.0` and share the machine's network address, for example `http://192.168.1.20:8000/`.
 
-The server runs up to 64 request workers and admits up to 256 additional queued requests. Data-changing requests are serialized so simultaneous likes, edits, and creates cannot overwrite one another in `program.json`. This lightweight JSON-backed setup assumes one server process and a trusted network; it has no user authentication and should not be exposed directly to the public internet. Event management and item edit/delete controls are not access-controlled; item controls are only hidden in the browser when the entered name does not match an item's contributor. For multiple server instances or sustained high write volume, use a transactional database and an authenticated production web server.
+The server runs up to 64 request workers and admits up to 256 additional queued requests. Data-changing requests are serialized so simultaneous likes, edits, and creates cannot overwrite one another in `program.json`. This lightweight JSON-backed setup assumes one server process and a trusted network; it has no user authentication and should not be exposed directly to the public internet. Event rename and deletion requests are restricted to the event's recorded creator name, but names are self-asserted and are not secure authentication. Item edit/delete controls are only hidden in the browser when the entered name does not match an item's contributor. For multiple server instances or sustained high write volume, use a transactional database and an authenticated production web server.
 
 ## Features
 
-- Enter your name and favorite language, then choose an existing event or create one; manage events by renaming or deleting them.
+- Enter your name and favorite language, then choose an existing event or create one during login. Only the recorded creator name can rename or delete an event.
 - Keep each event's locations, scheduled program, and topic ideas separate.
 - Browse the program in list or calendar view; filter by language, likes, contributions, or search terms and see the matching item count.
 - Browse and create topics, edit item details, and schedule a topic in the program; the topic view shows the count of matching items.
@@ -51,13 +51,13 @@ The server runs up to 64 request workers and admits up to 256 additional queued 
 
 ## Data
 
-After its first load, `program.json` contains an `events` array. Each event has its own:
+After its first load, `program.json` contains an `events` array. Each newly created event records its creator name and has its own:
 
 - `program`: scheduled items, including location, date, start/end time, contributors, languages, and likes.
 - `topics`: unscheduled topic ideas, with descriptions, contributors, languages, and likes.
 - `locations`: locations with descriptions and optional capacity and facilities.
 
-Changes made in the interface are written back to `program.json`. New events start with their own empty program, topics, and locations. Keep a backup before manually editing or replacing this file.
+Changes made in the interface are written back to `program.json`. New events start with their own empty program, topics, and locations. Older events without a `creatorName` remain available but cannot be renamed or deleted through the API. Keep a backup before manually editing or replacing this file.
 
 ## API
 
@@ -67,9 +67,9 @@ The server exposes these JSON endpoints for the interface:
 | --- | --- | --- |
 | `GET` | `/api/events` | List events. |
 | `GET` | `/api/event?eventId=...` | Load an event and its program, topics, and locations. |
-| `POST` | `/api/events` | Create an empty event. |
-| `PUT` | `/api/events` | Rename an event. |
-| `DELETE` | `/api/events` | Delete an event and its data. |
+| `POST` | `/api/events` | Create an empty event with `name` and `creatorName`. |
+| `PUT` | `/api/events` | Rename an event when `creatorName` matches its recorded creator. |
+| `DELETE` | `/api/events` | Delete an event and its data when `creatorName` matches its recorded creator. |
 | `POST` | `/api/like` | Add or remove a user's like on a program item or topic. |
 | `POST` | `/api/topics` | Create a topic. |
 | `PUT` | `/api/items` | Edit a program item or topic, or move a topic into or out of the program. |

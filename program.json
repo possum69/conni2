@@ -3,6 +3,7 @@
         {
             "id": "39cb0720782f4253a6e7167443a4aaef",
             "name": "OpenSpace 1",
+            "creatorName": "B. Baggins",
             "program": [
                 {
                     "name": "Der einsame Berg",
@@ -50,8 +51,9 @@
             ]
         },
         {
-            "id": "a27dec72deed4330b914e55d92bb8327",
-            "name": "OpenSpace 2",
+            "id": "1ae0be767e434ea6bf2e1eb0525844c8",
+            "name": "SemWo",
+            "creatorName": "B. Mattern",
             "program": [],
             "topics": [],
             "locations": []

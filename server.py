@@ -76,7 +76,10 @@ class ConniHandler(SimpleHTTPRequestHandler):
             data = self.read_data()
             if request_path == "/api/events":
                 self.send_json(200, {
-                    "events": [{"id": event["id"], "name": event["name"]} for event in data["events"]]
+                    "events": [
+                        {"id": event["id"], "name": event["name"], "creatorName": event.get("creatorName")}
+                        for event in data["events"]
+                    ]
                 })
                 return
 
@@ -386,8 +389,12 @@ class ConniHandler(SimpleHTTPRequestHandler):
 
     def create_event(self, request):
         name = request.get("name")
+        creator_name = request.get("creatorName")
         if not isinstance(name, str) or not name.strip() or len(name.strip()) > 160:
             self.send_json(400, {"error": "An event name of 1 to 160 characters is required"})
+            return
+        if not isinstance(creator_name, str) or not creator_name.strip() or len(creator_name) > 120:
+            self.send_json(400, {"error": "A creator name is required"})
             return
 
         data = self.read_data()
@@ -399,6 +406,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
         event = {
             "id": uuid4().hex,
             "name": name.strip(),
+            "creatorName": creator_name.strip(),
             "program": [],
             "topics": [],
             "locations": [],
@@ -410,6 +418,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
     def update_event(self, request):
         event_id = request.get("eventId")
         name = request.get("name")
+        creator_name = request.get("creatorName")
         if not isinstance(event_id, str) or not event_id:
             self.send_json(400, {"error": "Invalid event"})
             return
@@ -421,6 +430,9 @@ class ConniHandler(SimpleHTTPRequestHandler):
         event = self.find_event(data, event_id)
         if event is None:
             self.send_json(404, {"error": "Event not found"})
+            return
+        if not self.is_event_creator(event, creator_name):
+            self.send_json(403, {"error": "Only the event creator can rename this event"})
             return
         normalized_name = name.strip().casefold()
         if any(
@@ -436,6 +448,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
 
     def delete_event(self, request):
         event_id = request.get("eventId")
+        creator_name = request.get("creatorName")
         if not isinstance(event_id, str) or not event_id:
             self.send_json(400, {"error": "Invalid event"})
             return
@@ -449,9 +462,23 @@ class ConniHandler(SimpleHTTPRequestHandler):
             self.send_json(404, {"error": "Event not found"})
             return
 
+        if not self.is_event_creator(data["events"][event_index], creator_name):
+            self.send_json(403, {"error": "Only the event creator can delete this event"})
+            return
+
         deleted_event = data["events"].pop(event_index)
         self.write_data(data)
         self.send_json(200, {"event": deleted_event})
+
+    @staticmethod
+    def is_event_creator(event, creator_name):
+        event_creator = event.get("creatorName")
+        return (
+            isinstance(creator_name, str)
+            and bool(creator_name.strip())
+            and isinstance(event_creator, str)
+            and creator_name.strip().casefold() == event_creator.strip().casefold()
+        )
 
     def create_topic(self, request, data, event):
         name = request.get("name")

@@ -633,6 +633,16 @@
             <select id="event-select" required></select>
             <button type="submit" data-i18n="openEvent">Open event</button>
           </form>
+          <details id="event-manage-panel" hidden>
+            <summary data-i18n="manageEvent">Manage event</summary>
+            <form id="event-rename-form">
+              <label for="managed-event-name" data-i18n="eventName">Event name</label>
+              <input id="managed-event-name" name="name" type="text" maxlength="160" required />
+              <button type="submit" data-i18n="saveEvent">Save event</button>
+              <button id="delete-event-button" type="button" data-i18n="deleteEvent">Delete event</button>
+              <p id="event-manage-status" class="setup-status" role="status" aria-live="polite"></p>
+            </form>
+          </details>
           <details>
             <summary data-i18n="createEvent">Create a new event</summary>
             <form id="event-create-form">
@@ -648,25 +658,8 @@
     <div class="container">
       <h1 data-i18n="openSpace">Open Space</h1>
       <p class="subtitle" data-i18n="welcome">Welcome to Open Space!</p>
-      <div id="event-controls" class="event-controls" hidden>
-        <strong><span data-i18n="currentEvent">Current event:</span> <span id="current-event-name"></span></strong>
-        <button id="switch-event-button" type="button" data-i18n="switchEvent">Switch event</button>
-        <details>
-          <summary data-i18n="manageEvent">Manage event</summary>
-          <form id="event-rename-form">
-            <label for="managed-event-name" data-i18n="eventName">Event name</label>
-            <input id="managed-event-name" name="name" type="text" maxlength="160" required />
-            <button type="submit" data-i18n="saveEvent">Save event</button>
-            <button id="delete-event-button" type="button" data-i18n="deleteEvent">Delete event</button>
-            <p id="event-manage-status" class="setup-status" role="status" aria-live="polite"></p>
-          </form>
-        </details>
-      </div>
+      <p id="active-event-label" class="save-status" hidden><span data-i18n="currentEvent">Current event:</span> <span id="current-event-name"></span></p>
       <div class="filter-bar">
-        <div class="filter-group">
-          <label for="current-user-name" data-i18n="yourName">Your name:</label>
-          <input id="current-user-name" type="text" autocomplete="name" placeholder="Enter your name" data-i18n-placeholder="enterName" />
-        </div>
         <div class="filter-group">
           <label for="page-language-filter" data-i18n="pageLanguage">Your language:</label>
           <select id="page-language-filter">
@@ -1080,7 +1073,6 @@
       let currentUserName = '';
       let hasSavedLanguage = false;
       let currentEventId = '';
-      let currentEventName = '';
 
       function translate(key, values = {}) {
         const pageText = (pageTranslations[currentPageLanguage] || pageTranslations.en)[key];
@@ -1194,6 +1186,7 @@
           const result = await response.json();
           availableEvents = result.events;
           selector.replaceChildren();
+          document.getElementById('event-manage-panel').hidden = true;
           if (!availableEvents.length) {
             const option = document.createElement('option');
             option.value = '';
@@ -1218,6 +1211,7 @@
               selector.value = previousEventId;
             }
           } catch {}
+          updateEventManagementForm();
           status.textContent = '';
         } catch (error) {
           status.textContent = error.message || translate('eventLoadFailed');
@@ -1226,15 +1220,27 @@
 
       async function activateEvent(event) {
         currentEventId = event.id;
-        currentEventName = event.name;
+        document.getElementById('current-event-name').textContent = event.name;
+        document.getElementById('active-event-label').hidden = false;
         try {
           localStorage.setItem('conni2-event-id', currentEventId);
         } catch {}
-        document.getElementById('current-event-name').textContent = currentEventName;
-        document.getElementById('managed-event-name').value = currentEventName;
-        document.getElementById('event-controls').hidden = false;
         document.getElementById('event-setup-overlay').hidden = true;
         await loadData();
+      }
+
+      function selectedEvent() {
+        return availableEvents.find(event => event.id === document.getElementById('event-select').value);
+      }
+
+      function updateEventManagementForm() {
+        const event = selectedEvent();
+        const panel = document.getElementById('event-manage-panel');
+        const canManage = event && typeof event.creatorName === 'string' &&
+          event.creatorName.trim().toLocaleLowerCase() === currentUserName.trim().toLocaleLowerCase();
+        panel.hidden = !canManage;
+        document.getElementById('event-manage-status').textContent = '';
+        if (canManage) document.getElementById('managed-event-name').value = event.name;
       }
 
       function initializeEventFlow() {
@@ -1260,7 +1266,6 @@
           currentUserName = nameInput.value.trim();
           currentPageLanguage = languageSelect.value;
           hasSavedLanguage = true;
-          document.getElementById('current-user-name').value = currentUserName;
           pageLanguageSelect.value = currentPageLanguage;
           try {
             localStorage.setItem(userNameStorageKey, currentUserName);
@@ -1280,6 +1285,8 @@
           if (chosenEvent) activateEvent(chosenEvent);
         });
 
+        document.getElementById('event-select').addEventListener('change', updateEventManagementForm);
+
         document.getElementById('event-create-form').addEventListener('submit', async event => {
           event.preventDefault();
           const form = event.currentTarget;
@@ -1291,11 +1298,14 @@
             const response = await fetch('/api/events', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: new FormData(form).get('name') })
+              body: JSON.stringify({ name: new FormData(form).get('name'), creatorName: currentUserName })
             });
             const result = await response.json();
             if (!response.ok) throw new Error(result.error || translate('eventSaveFailed'));
             form.reset();
+            try {
+              localStorage.setItem('conni2-event-id', result.event.id);
+            } catch {}
             await activateEvent(result.event);
           } catch (error) {
             status.textContent = error.message || translate('eventSaveFailed');
@@ -1304,7 +1314,6 @@
           }
         });
 
-        document.getElementById('switch-event-button').addEventListener('click', openEventChooser);
         document.getElementById('event-rename-form').addEventListener('submit', async event => {
           event.preventDefault();
           const form = event.currentTarget;
@@ -1317,15 +1326,17 @@
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                eventId: currentEventId,
-                name: new FormData(form).get('name')
+                eventId: selectedEvent().id,
+                name: new FormData(form).get('name'),
+                creatorName: currentUserName
               })
             });
             const result = await response.json();
             if (!response.ok) throw new Error(result.error || translate('eventSaveFailed'));
-            currentEventName = result.event.name;
-            document.getElementById('current-event-name').textContent = currentEventName;
-            document.getElementById('managed-event-name').value = currentEventName;
+            const managedEvent = selectedEvent();
+            managedEvent.name = result.event.name;
+            document.getElementById('event-select').selectedOptions[0].textContent = result.event.name;
+            document.getElementById('managed-event-name').value = result.event.name;
             status.textContent = translate('eventSaved');
           } catch (error) {
             status.textContent = error.message || translate('eventSaveFailed');
@@ -1335,7 +1346,8 @@
         });
 
         document.getElementById('delete-event-button').addEventListener('click', async event => {
-          if (!window.confirm(translate('deleteEventConfirm', { name: currentEventName }))) return;
+          const managedEvent = selectedEvent();
+          if (!managedEvent || !window.confirm(translate('deleteEventConfirm', { name: managedEvent.name }))) return;
           const button = event.currentTarget;
           const status = document.getElementById('event-manage-status');
           button.disabled = true;
@@ -1344,14 +1356,16 @@
             const response = await fetch('/api/events', {
               method: 'DELETE',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ eventId: currentEventId })
+              body: JSON.stringify({ eventId: managedEvent.id, creatorName: currentUserName })
             });
             const result = await response.json();
             if (!response.ok) throw new Error(result.error || translate('eventSaveFailed'));
-            try {
-              localStorage.removeItem('conni2-event-id');
-            } catch {}
-            openEventChooser();
+            availableEvents = availableEvents.filter(candidate => candidate.id !== managedEvent.id);
+            if (document.getElementById('event-select').value === managedEvent.id) {
+              document.getElementById('event-select').selectedIndex = 0;
+            }
+            try { localStorage.removeItem('conni2-event-id'); } catch {}
+            await loadEventChoices();
           } catch (error) {
             status.textContent = error.message || translate('eventSaveFailed');
           } finally {
@@ -1661,7 +1675,6 @@
       }
 
       function initializeUserName() {
-        const nameInput = document.getElementById('current-user-name');
         const status = document.getElementById('user-name-status');
         try {
           currentUserName = localStorage.getItem(userNameStorageKey) || '';
@@ -1669,27 +1682,6 @@
         } catch {
           status.textContent = translate('nameStorageUnavailable');
         }
-        nameInput.value = currentUserName;
-
-        nameInput.addEventListener('input', () => {
-          currentUserName = nameInput.value.trim();
-          try {
-            if (currentUserName) {
-              localStorage.setItem(userNameStorageKey, currentUserName);
-              status.textContent = translate('saved');
-            } else {
-              localStorage.removeItem(userNameStorageKey);
-              status.textContent = '';
-            }
-          } catch {
-            status.textContent = translate('nameStorageUnavailable');
-          }
-
-          if (!window.allProgramItems) return;
-
-          populateLikerFilters();
-          renderCurrentViews();
-        });
       }
 
       function initializeTopicCreation() {

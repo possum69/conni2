@@ -10,6 +10,7 @@ On Windows:
 
 ```powershell
 py -m pip install -r requirements.txt
+$env:LOCAL_AUTH_BYPASS = "true"
 py server.py
 ```
 
@@ -17,7 +18,7 @@ On other systems, use:
 
 ```sh
 python3 -m pip install -r requirements.txt
-python3 server.py
+LOCAL_AUTH_BYPASS=true python3 server.py
 ```
 
 Open <http://127.0.0.1:8000/>. The default host and port can be changed with `--host` and `--port`, for example:
@@ -27,6 +28,8 @@ python3 server.py --host 0.0.0.0 --port 8080
 ```
 
 Stop the server with `Ctrl+C`.
+
+`LOCAL_AUTH_BYPASS=true` signs local loopback requests in as a development user without GitHub. On first visit, enter a name; it is saved in a local-only cookie and used for likes. Use **Change local name** to update it. The bypass is ignored on Render and for non-loopback clients. Events created in this mode use the `local-development` creator ID; assign the real GitHub creator ID before moving those events to production.
 
 ## GitHub OAuth
 
@@ -45,7 +48,7 @@ In the Render service's **Environment** settings, set:
 - `GITHUB_REDIRECT_URI`: `https://openspace4you.onrender.com/auth/callback`.
 - `SESSION_SECRET`: a private random value of at least 32 characters. Generate one with `py -c "import secrets; print(secrets.token_urlsafe(48))"` and keep it secret.
 
-Save the variables and redeploy. Keep the GitHub client secret and session secret only in Render's environment settings, never in the repository. Local development also requires these variables, using `http://127.0.0.1:8000/auth/callback` as the redirect URI and that exact URL in the local GitHub OAuth App configuration.
+Save the variables and redeploy. Keep the GitHub client secret and session secret only in Render's environment settings, never in the repository. To test real GitHub OAuth locally instead of using the development bypass, set the same variables but use `http://127.0.0.1:8000/auth/callback` as the redirect URI and register that exact URL in the local GitHub OAuth App configuration.
 
 ## Deploy to Render
 

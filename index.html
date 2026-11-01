@@ -607,6 +607,10 @@
         text-decoration: none;
       }
 
+      .github-login-button[hidden] {
+        display: none;
+      }
+
       .auth-logout-button {
         border: 1px solid var(--border);
         border-radius: 6px;
@@ -615,6 +619,10 @@
         color: var(--text);
         font: inherit;
         cursor: pointer;
+      }
+
+      #local-login-form[hidden] {
+        display: none;
       }
 
       .setup-card details {
@@ -638,7 +646,13 @@
       <div class="setup-card">
         <section id="profile-setup-step">
           <h2 id="setup-heading" data-i18n="githubSignIn">Sign in to Open Space</h2>
-          <a class="github-login-button" href="/auth/login" data-i18n="githubLogin">Continue with GitHub</a>
+          <a id="github-login-link" class="github-login-button" href="/auth/login" data-i18n="githubLogin">Continue with GitHub</a>
+          <form id="local-login-form" hidden>
+            <label for="local-user-name" data-i18n="yourName">Your name</label>
+            <input id="local-user-name" name="name" type="text" maxlength="120" autocomplete="name" required />
+            <button type="submit" data-i18n="continueToEvents">Continue</button>
+            <p id="local-login-status" class="setup-status" role="status" aria-live="polite"></p>
+          </form>
         </section>
         <section id="event-setup-step" hidden>
           <h2 data-i18n="chooseEvent">Choose an event</h2>
@@ -869,7 +883,7 @@
       const pageTranslations = {
         en: {
           openSpace: 'Open Space', welcome: 'Welcome to Open Space!', pageLanguage: 'Language:', yourName: 'Your name:', enterName: 'Enter your name', saved: 'Saved',
-          githubSignIn: 'Sign in to Open Space', githubLogin: 'Continue with GitHub', signOut: 'Sign out', authLoadFailed: 'Could not verify the GitHub session.',
+          githubSignIn: 'Sign in to Open Space', githubLogin: 'Continue with GitHub', signOut: 'Sign out', changeLocalName: 'Change local name', localDevelopment: 'Local development', localDevelopmentUser: 'Local development ({name})', authLoadFailed: 'Could not verify the GitHub session.',
           authorizedUsers: 'Authorized GitHub accounts', githubUsername: 'GitHub username', addAuthorizedUser: 'Grant access', removeAuthorizedUser: 'Remove access', authorizedUserAdded: 'Access granted.', authorizedUserRemoved: 'Access removed.', authorizedUserFailed: 'Could not update authorized accounts.', eventCreatedAddUsers: 'Event created. Add accounts or open the event.',
           profileSetup: 'Tell us about yourself', favoriteLanguage: 'Favorite language', continueToEvents: 'Continue', chooseEvent: 'Choose an event',
           selectEvent: 'Select an event', openEvent: 'Open event', createEvent: 'Create a new event', eventName: 'Event name', addEvent: 'Create event',
@@ -1439,27 +1453,71 @@
           window.location.reload();
         });
 
+        document.getElementById('local-login-form').addEventListener('submit', async event => {
+          event.preventDefault();
+          const form = event.currentTarget;
+          const button = form.querySelector('button[type="submit"]');
+          const status = document.getElementById('local-login-status');
+          button.disabled = true;
+          status.textContent = '';
+          try {
+            const response = await fetch('/auth/local-login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: new FormData(form).get('name') })
+            });
+            const result = response.status === 204 ? {} : await response.json();
+            if (!response.ok) throw new Error(result.error || translate('authLoadFailed'));
+            window.location.reload();
+          } catch (error) {
+            status.textContent = error.message || translate('authLoadFailed');
+          } finally {
+            button.disabled = false;
+          }
+        });
+
         const profileStep = document.getElementById('profile-setup-step');
         const eventStep = document.getElementById('event-setup-step');
+        const githubLoginLink = document.getElementById('github-login-link');
+        const localLoginForm = document.getElementById('local-login-form');
         try {
           const response = await fetch('/api/me');
           if (response.status === 401) {
             profileStep.hidden = false;
             eventStep.hidden = true;
+            githubLoginLink.hidden = false;
+            localLoginForm.hidden = true;
             return;
           }
           if (!response.ok) throw new Error(translate('authLoadFailed'));
           const result = await response.json();
           currentUserId = result.user.id;
           currentUserName = result.user.login;
-          document.getElementById('github-user-name').textContent = `@${currentUserName}`;
+          if (result.user.local && !currentUserName) {
+            githubLoginLink.hidden = true;
+            localLoginForm.hidden = false;
+            document.getElementById('local-user-name').focus();
+            profileStep.hidden = false;
+            eventStep.hidden = true;
+            return;
+          }
+          githubLoginLink.hidden = true;
+          localLoginForm.hidden = true;
+          document.getElementById('github-user-name').textContent = result.user.local
+            ? translate('localDevelopmentUser', { name: currentUserName })
+            : `@${currentUserName}`;
           document.getElementById('github-user-name').hidden = false;
+          document.getElementById('logout-button').textContent = result.user.local
+            ? translate('changeLocalName')
+            : translate('signOut');
           document.getElementById('logout-button').hidden = false;
           profileStep.hidden = true;
           openEventChooser();
         } catch (error) {
           profileStep.hidden = false;
           eventStep.hidden = true;
+          githubLoginLink.hidden = false;
+          localLoginForm.hidden = true;
           document.getElementById('event-setup-status').textContent = error.message || translate('authLoadFailed');
         }
       }

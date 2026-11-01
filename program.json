@@ -4,6 +4,16 @@
             "id": "39cb0720782f4253a6e7167443a4aaef",
             "name": "An unexpected Meeting",
             "creatorName": "B. Baggins",
+            "authorizedUsers": [
+                {
+                    "id": "example-github-id-1",
+                    "login": "example-user-one"
+                },
+                {
+                    "id": "example-github-id-2",
+                    "login": "example-user-two"
+                }
+            ],
             "program": [
                 {
                     "name": "Der einsame Berg",
@@ -37,7 +47,21 @@
                     "duration": 480
                 }
             ],
-            "topics": [],
+            "topics": [
+                {
+                    "name": "A long expected party",
+                    "desc": "111",
+                    "contributers": [
+                        "B. Baggins",
+                        "F. Baggins"
+                    ],
+                    "languages": [
+                        "English"
+                    ],
+                    "likers": [],
+                    "likeCount": 0
+                }
+            ],
             "locations": [
                 {
                     "name": "Keller",
@@ -49,6 +73,63 @@
                     "capacity": 15
                 }
             ]
+        },
+        {
+            "id": "7a826faf245b436695a1ba400a3391ee",
+            "name": "Test 2",
+            "creatorId": "local-development",
+            "creatorLogin": "local-developer",
+            "authorizedUsers": [
+                {
+                    "id": "153100",
+                    "login": "Possum"
+                }
+            ],
+            "program": [],
+            "topics": [
+                {
+                    "name": "A Tolic",
+                    "desc": "asdasdad",
+                    "contributers": [
+                        "me"
+                    ],
+                    "languages": [
+                        "D"
+                    ],
+                    "likers": [
+                        "local-developer",
+                        "Possum"
+                    ],
+                    "likeCount": 2
+                },
+                {
+                    "name": "B asas",
+                    "desc": "asdasd",
+                    "contributers": [
+                        "Stella"
+                    ],
+                    "languages": [
+                        "T"
+                    ],
+                    "likers": [
+                        "Possum"
+                    ],
+                    "likeCount": 1
+                },
+                {
+                    "name": "C Team",
+                    "desc": "sdfdf",
+                    "contributers": [
+                        "Possum"
+                    ],
+                    "languages": [
+                        "ascii"
+                    ],
+                    "likers": [],
+                    "likeCount": 0
+                }
+            ],
+            "locations": []
         }
     ]
 }

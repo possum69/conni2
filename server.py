@@ -1,4 +1,5 @@
 import argparse
+import ipaddress
 import json
 import os
 import secrets
@@ -10,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.cookies import SimpleCookie
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 from uuid import uuid4
 
 import requests
@@ -23,6 +24,7 @@ DATA_FILE = ROOT / "program.json"
 MAX_REQUEST_SIZE = 16_384
 MAX_REQUEST_WORKERS = 64
 MAX_QUEUED_REQUESTS = 256
+LOCAL_DEVELOPMENT_USER = {"id": "local-development", "login": "local-developer", "local": True}
 DATA_LOCK = threading.RLock()
 
 
@@ -161,6 +163,10 @@ class ConniHandler(SimpleHTTPRequestHandler):
             return None
 
     def authenticated_user(self):
+        if self.local_auth_bypass_enabled():
+            user = dict(LOCAL_DEVELOPMENT_USER)
+            user["login"] = unquote(self.cookie_value("conni2_local_name") or "").strip()
+            return user
         serializer = self.session_serializer()
         cookie_value = self.cookie_value("conni2_session")
         if serializer is None or not cookie_value:
@@ -172,6 +178,14 @@ class ConniHandler(SimpleHTTPRequestHandler):
         if not isinstance(user, dict) or not isinstance(user.get("id"), str) or not isinstance(user.get("login"), str):
             return None
         return user
+
+    def local_auth_bypass_enabled(self):
+        if os.environ.get("RENDER") or os.environ.get("LOCAL_AUTH_BYPASS", "").casefold() != "true":
+            return False
+        try:
+            return ipaddress.ip_address(self.client_address[0]).is_loopback
+        except ValueError:
+            return False
 
     def require_authenticated_user(self):
         user = self.authenticated_user()
@@ -274,6 +288,31 @@ class ConniHandler(SimpleHTTPRequestHandler):
             "Set-Cookie",
             f"conni2_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0{self.secure_cookie()}",
         )
+        self.send_header("Set-Cookie", "conni2_local_name=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0")
+        self.end_headers()
+
+    def start_local_login(self):
+        if not self.local_auth_bypass_enabled():
+            self.send_json(404, {"error": "Not found"})
+            return
+        try:
+            request_size = int(self.headers.get("Content-Length", "0"))
+            if request_size <= 0 or request_size > MAX_REQUEST_SIZE:
+                self.send_json(400, {"error": "Invalid request size"})
+                return
+            request = json.loads(self.rfile.read(request_size))
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            self.send_json(400, {"error": "Invalid JSON request"})
+            return
+
+        name = request.get("name") if isinstance(request, dict) else None
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 120:
+            self.send_json(400, {"error": "Enter a name of 1 to 120 characters"})
+            return
+
+        cookie = f"conni2_local_name={quote(name.strip(), safe='')}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800"
+        self.send_response(204)
+        self.send_header("Set-Cookie", cookie)
         self.end_headers()
 
     @staticmethod
@@ -308,6 +347,8 @@ class ConniHandler(SimpleHTTPRequestHandler):
 
     @staticmethod
     def can_access_event(event, user):
+        if user.get("local"):
+            return True
         if str(event.get("creatorId", "")) == user["id"]:
             return True
         return any(
@@ -326,6 +367,9 @@ class ConniHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         """Handle like updates and event, topic, or location creation requests."""
         request_path = urlparse(self.path).path
+        if request_path == "/auth/local-login":
+            self.start_local_login()
+            return
         if request_path == "/auth/logout":
             self.clear_session()
             return
@@ -686,7 +730,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
 
     @staticmethod
     def is_event_creator(event, user):
-        return str(event.get("creatorId", "")) == user["id"]
+        return user.get("local", False) or str(event.get("creatorId", "")) == user["id"]
 
     def add_authorized_user(self, request, user):
         event_id = request.get("eventId")

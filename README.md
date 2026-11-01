@@ -75,7 +75,7 @@ The server runs up to 64 request workers and admits up to 256 additional queued 
 
 ## Data
 
-After its first load, `program.json` contains an `events` array. Each newly created event records `creatorId` (the creator's GitHub user ID), `creatorLogin`, and an `authorizedUsers` array of `{ "id": "...", "login": "..." }` GitHub accounts. The creator has access implicitly. Each event also has its own:
+After its first load, `program.json` contains an `events` array. Each newly created event records `creatorId` (the creator's GitHub user ID), `creatorLogin`, and an `authorizedUsers` array containing GitHub login strings or `{ "id": "...", "login": "..." }` accounts. The creator has access implicitly. New grants store the login and match it against the login verified by OAuth; numeric IDs are preferred when already present. Each event also has its own:
 
 - `program`: scheduled items, including location, date, start/end time, contributors, languages, and likes.
 - `topics`: unscheduled topic ideas, with descriptions, contributors, languages, and likes.
@@ -107,6 +107,6 @@ The server exposes these JSON endpoints for the interface:
 | `POST` | `/api/locations` | Create a location. |
 | `PUT` | `/api/locations` | Edit a location and update program references when it is renamed. |
 
-All API endpoints require a valid GitHub session. `/api/events` only lists accessible events; direct event reads and writes also check access server-side. The creator can enter a GitHub login in the event chooser; the server resolves it through GitHub and stores its stable user ID in `authorizedUsers`. For legacy data, the server also matches explicit `creatorLogin` and login-only authorized entries. Program, topic, and location requests accept an `eventId` query parameter to select which accessible event they change. Event names must be unique (case-insensitively); event contents are kept separate.
+All API endpoints require a valid GitHub session. `/api/events` only lists accessible events; direct event reads and writes also check access server-side. The creator can enter a GitHub login in the event chooser; it is matched against the login verified during OAuth, without a separate GitHub API lookup. For legacy data, the server also matches explicit `creatorLogin` and login-only authorized entries. Program, topic, and location requests accept an `eventId` query parameter to select which accessible event they change. Event names must be unique (case-insensitively); event contents are kept separate.
 
 The server binds to localhost by default. Binding to another host may expose the app and its writable data file to other machines on the network.

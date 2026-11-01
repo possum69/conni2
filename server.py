@@ -2,6 +2,7 @@ import argparse
 import ipaddress
 import json
 import os
+import re
 import secrets
 import tempfile
 import threading
@@ -11,10 +12,9 @@ from concurrent.futures import ThreadPoolExecutor
 from http.cookies import SimpleCookie
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, quote, unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 from uuid import uuid4
 
-import requests
 from authlib.integrations.requests_client import OAuth2Session
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -764,9 +764,10 @@ class ConniHandler(SimpleHTTPRequestHandler):
         if not isinstance(event_id, str) or not event_id:
             self.send_json(400, {"error": "Invalid event"})
             return
-        if not isinstance(login, str) or not login.strip() or len(login.strip()) > 39:
+        if not isinstance(login, str) or not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?", login.strip()):
             self.send_json(400, {"error": "Enter a valid GitHub username"})
             return
+        login = login.strip()
 
         data = self.read_data()
         event = self.find_event(data, event_id)
@@ -777,35 +778,19 @@ class ConniHandler(SimpleHTTPRequestHandler):
             self.send_json(403, {"error": "Only the event creator can manage authorized users"})
             return
 
-        try:
-            response = requests.get(
-                f"https://api.github.com/users/{quote(login.strip(), safe='')}",
-                headers={"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "OpenSpace"},
-                timeout=5,
-            )
-        except requests.RequestException:
-            self.send_json(503, {"error": "Could not reach GitHub to verify that account"})
-            return
-        if response.status_code == 404:
-            self.send_json(404, {"error": "GitHub account not found"})
-            return
-        if response.status_code != 200:
-            self.send_json(503, {"error": "GitHub could not verify that account right now"})
-            return
-
-        profile = response.json()
-        if not isinstance(profile.get("id"), int) or not isinstance(profile.get("login"), str):
-            self.send_json(502, {"error": "GitHub returned an invalid account"})
-            return
-        authorized_user = {"id": str(profile["id"]), "login": profile["login"]}
-        if authorized_user["id"] == user["id"]:
+        if login.casefold() == user["login"].casefold():
             self.send_json(409, {"error": "The event creator is already authorized"})
             return
 
         authorized_users = event.setdefault("authorizedUsers", [])
-        if any(self.matches_github_account(entry, authorized_user) for entry in authorized_users):
+        if any(
+            (entry.casefold() if isinstance(entry, str) else entry.get("login", "").casefold()) == login.casefold()
+            for entry in authorized_users
+            if isinstance(entry, (str, dict))
+        ):
             self.send_json(409, {"error": "That account is already authorized"})
             return
+        authorized_user = {"login": login}
         authorized_users.append(authorized_user)
         self.write_data(data)
         self.send_json(201, {"authorizedUsers": authorized_users})
@@ -834,7 +819,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
         updated_users = [
             entry for entry in authorized_users
             if not (
-                (isinstance(user_id, str) and isinstance(entry, dict) and str(entry.get("id", "")) == user_id)
+                (isinstance(user_id, str) and bool(user_id) and isinstance(entry, dict) and str(entry.get("id", "")) == user_id)
                 or (isinstance(login, str) and self.matches_github_account(entry, {"id": "", "login": login}))
             )
         ]

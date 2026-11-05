@@ -46,7 +46,7 @@ With Microsoft Edge installed, run the end-to-end tests from the repository root
 py -m robot --variable BASE_URL:http://127.0.0.1:8000/ --outputdir robot-results tests/robot
 ```
 
-The suite covers local sign-in, event creation/rename/deletion, location creation/editing, topic creation/editing/deletion as both contributors, scheduling and rescheduling, and the available program/topic filters and views. It creates a uniquely named event and deletes it when the test succeeds. If a test fails before cleanup, remove its `RF Event ...` event in the UI. Topics use list cards; the calendar view is available for program items only.
+The suite covers local sign-in, event creation/rename/deletion, location creation/editing, topic creation/editing/deletion as contributors, creator editing of topics and scheduled items, scheduling and rescheduling, and the available program/topic filters and views. It creates a uniquely named event and deletes it when the test succeeds. If a test fails before cleanup, remove its `RF Event ...` event in the UI. Topics use list cards; the calendar view is available for program items only.
 
 `LOCAL_AUTH_BYPASS=true` signs local loopback requests in as a development user without GitHub. On first visit, enter a name; it is saved in a local-only cookie and used for likes. Use **Change local name** to update it. The bypass is ignored on Render and for non-loopback clients. Events created in this mode use the `local-development` creator ID; assign the real GitHub creator ID before moving those events to production.
 
@@ -87,7 +87,7 @@ The server runs up to 64 request workers and admits up to 256 additional queued 
 - Assign contributors from the event creator and authorized accounts; the server rejects new contributor names outside that list.
 - Keep each event's locations, scheduled program, and topic ideas separate.
 - Browse the program in list or calendar view; filter by language, likes, contributions, or search terms and see the matching item count.
-- Browse and create topics, edit item details, and schedule a topic in the program; the topic view shows the count of matching items.
+- Browse and create topics, edit item details, and schedule a topic in the program; the event creator can edit every topic and program item, while other users can edit their own contributions. The topic view shows the count of matching items.
 - Language, item-type, and likes filters default to All, and topics default to date order. Entering a name does not change the selected likes filter.
 - Create and edit locations, including descriptions, capacity, and facilities. Location capacity appears in the scheduling dropdown; renaming a location updates program items assigned to it.
 - Like items using the signed-in GitHub login. The selected page language is stored in browser local storage.

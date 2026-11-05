@@ -1117,6 +1117,7 @@
       let currentUserName = '';
       let currentUserId = '';
       let currentEventId = '';
+      let currentEvent = null;
 
       function translate(key, values = {}) {
         const pageText = (pageTranslations[currentPageLanguage] || pageTranslations.en)[key];
@@ -1291,6 +1292,7 @@
 
       async function activateEvent(event) {
         currentEventId = event.id;
+        currentEvent = null;
         document.getElementById('current-event-name').textContent = event.name;
         document.getElementById('active-event-label').hidden = false;
         try {
@@ -1624,7 +1626,7 @@
       }
 
       function renderItemEditor(item, itemType) {
-        if (!canManageItem(item)) return '';
+        if (!canEditItem(item)) return '';
 
         const isProgram = itemType === 'program';
         const existingContributors = item.contributers || [];
@@ -1926,6 +1928,7 @@
           }
 
           const data = await response.json();
+          currentEvent = data.event;
           window.allProgramItems = data.event.program || [];
           window.allTopics = data.event.topics || [];
           window.allLocations = data.event.locations || [];
@@ -2042,6 +2045,21 @@
         return (item.contributers || []).some(contributor =>
           contributor.trim().toLocaleLowerCase() === userKey
         );
+      }
+
+      function canEditItem(item) {
+        return isCurrentEventCreator() || canManageItem(item);
+      }
+
+      function isCurrentEventCreator() {
+        if (!currentUserName || !currentEvent) return false;
+
+        const creatorId = currentEvent.creatorId == null ? '' : String(currentEvent.creatorId);
+        if (creatorId === currentUserId) return true;
+        if (/^\d+$/.test(creatorId)) return false;
+
+        return typeof currentEvent.creatorLogin === 'string'
+          && currentEvent.creatorLogin.trim().toLocaleLowerCase() === currentUserKey();
       }
 
       function escapeAttributeValue(value) {

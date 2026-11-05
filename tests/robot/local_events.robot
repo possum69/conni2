@@ -16,6 +16,7 @@ ${EARLIER_TOPIC}    RF Earlier Program Topic
 ${FILTER_TOPIC}   RF Z Filter Topic
 ${BOB_DELETE_TOPIC}    RF Bob Delete Topic
 ${ALPHA_DELETE_TOPIC}    RF Alpha Delete Topic
+${CREATOR_EDIT_TOPIC}    RF Creator Edit Topic
 ${EARLIER_DATE}   2030-05-09
 ${FIRST_DATE}     2030-05-10
 ${SECOND_DATE}    2030-05-11
@@ -110,6 +111,22 @@ Local User Can Manage Events Locations Topics And Program Views
     Check Program Filters And Views    ${SCHEDULED_TOPIC}
     Check Topic Filters And Sort Options    ${SCHEDULED_TOPIC}    ${FILTER_TOPIC}
 
+    Switch Local User    ${BETA}
+    Click Element    css=button.tab[data-tab="topics"]
+    Create Topic With Contributors    ${CREATOR_EDIT_TOPIC}    Created by Beta for creator-edit coverage.    English    ${BETA}
+    Switch Local User    ${ALPHA}
+    Click Element    css=button.tab[data-tab="topics"]
+    Edit Topic Description    ${CREATOR_EDIT_TOPIC}    Edited by the event creator.
+    Page Should Not Contain Element    css=[data-delete-name="${CREATOR_EDIT_TOPIC}"]
+
+    Switch Local User    ${BETA}
+    Click Element    css=button.tab[data-tab="topics"]
+    Schedule Topic    ${CREATOR_EDIT_TOPIC}    ${FIRST_DATE}    13:00    14:00
+    Switch Local User    ${ALPHA}
+    Click Element    css=button.tab[data-tab="program"]
+    Edit Program Schedule    ${CREATOR_EDIT_TOPIC}    ${SECOND_DATE}    15:00    16:00
+    Element Should Contain    xpath=//article[contains(@class,"card")][.//h3[normalize-space()="${CREATOR_EDIT_TOPIC}"]]    May 11, 2030
+
     Sign In And Leave Event Chooser Open
     Click Element    css=#event-manage-panel summary
     Click Element    id=delete-event-button
@@ -144,17 +161,25 @@ Sign In And Leave Event Chooser Open
     Wait Until Element Is Visible    id=event-manage-panel    timeout=10 seconds
 
 Create Topic With Contributors
-    [Arguments]    ${name}    ${description}    ${language}
+    [Arguments]    ${name}    ${description}    ${language}    ${contributor}=${EMPTY}
     Click Element    css=#topics-section details.topic-create summary
     Input Text    id=new-topic-name    ${name}
     Input Text    id=new-topic-description    ${description}
-    Select From List By Label    id=new-topic-contributors    ${ALPHA}    ${BETA}
+    IF    $contributor == ''
+        Select From List By Label    id=new-topic-contributors    ${ALPHA}    ${BETA}
+    ELSE
+        Select From List By Label    id=new-topic-contributors    ${contributor}
+    END
     Input Text    id=new-topic-languages    ${language}
     Click Element    css=#create-topic-form button[type="submit"]
     Wait Until Element Contains    id=topic-create-status    Topic created.    timeout=10 seconds
     Wait Until Page Contains Element    xpath=//article[.//h3[normalize-space()="${name}"]]    timeout=10 seconds
-    Element Should Contain    xpath=//article[.//h3[normalize-space()="${name}"]]    ${ALPHA}
-    Element Should Contain    xpath=//article[.//h3[normalize-space()="${name}"]]    ${BETA}
+    IF    $contributor == ''
+        Element Should Contain    xpath=//article[.//h3[normalize-space()="${name}"]]    ${ALPHA}
+        Element Should Contain    xpath=//article[.//h3[normalize-space()="${name}"]]    ${BETA}
+    ELSE
+        Element Should Contain    xpath=//article[.//h3[normalize-space()="${name}"]]    ${contributor}
+    END
 
 Edit Topic Description
     [Arguments]    ${name}    ${description}

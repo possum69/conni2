@@ -69,6 +69,23 @@ In the Render service's **Environment** settings, set:
 
 Save the variables and redeploy. Keep the GitHub client secret and session secret only in Render's environment settings, never in the repository. To test real GitHub OAuth locally instead of using the development bypass, set the same variables but use `http://127.0.0.1:8000/auth/callback` as the redirect URI and register that exact URL in the local GitHub OAuth App configuration.
 
+## Microsoft OAuth
+
+In the [Microsoft Entra admin center](https://entra.microsoft.com/), register an application that supports **Accounts in any organizational directory and personal Microsoft accounts**. Add a **Web** redirect URI:
+
+```text
+https://openspace4you.onrender.com/auth/microsoft/callback
+```
+
+Create a client secret for the application. In the Render service's **Environment** settings, set:
+
+- `MICROSOFT_CLIENT_ID`: the application (client) ID.
+- `MICROSOFT_CLIENT_SECRET`: the client secret value.
+- `MICROSOFT_REDIRECT_URI`: `https://openspace4you.onrender.com/auth/microsoft/callback`.
+- `SESSION_SECRET`: the same private random value used for GitHub OAuth.
+
+Save the variables and redeploy. For local OAuth testing, use `http://127.0.0.1:8000/auth/microsoft/callback` as the redirect URI and register that exact URL in the Entra application. Microsoft users sign in with their account email; event creators must still explicitly grant them access to each event.
+
 ## Deploy to Render
 
 This repository includes a Render Blueprint in `render.yaml`. In Render, create a new Blueprint instance from the repository and accept the `openspace` web service. Render installs dependencies from `requirements.txt` and starts `src/server.py` on its assigned port.
@@ -111,13 +128,15 @@ The server exposes these JSON endpoints for the interface:
 | --- | --- | --- |
 | `GET` | `/auth/login` | Start GitHub OAuth sign-in. |
 | `GET` | `/auth/callback` | Complete GitHub OAuth sign-in. |
+| `GET` | `/auth/microsoft/login` | Start Microsoft OAuth sign-in. |
+| `GET` | `/auth/microsoft/callback` | Complete Microsoft OAuth sign-in. |
 | `POST` | `/auth/logout` | Clear the current session. |
-| `GET` | `/api/me` | Return the signed-in GitHub account. |
+| `GET` | `/api/me` | Return the signed-in account. |
 | `GET` | `/api/events` | List events for a signed-in user. |
 | `GET` | `/api/event?eventId=...` | Load an event and its program, topics, and locations. |
 | `POST` | `/api/events` | Create an empty event owned by the signed-in account. |
-| `POST` | `/api/events/authorized-users` | Resolve a GitHub login and grant it access to an event (creator only). |
-| `DELETE` | `/api/events/authorized-users` | Revoke an authorized GitHub account (creator only). |
+| `POST` | `/api/events/authorized-users` | Grant a GitHub login or Microsoft email access to an event (creator only). |
+| `DELETE` | `/api/events/authorized-users` | Revoke an authorized account (creator only). |
 | `PUT` | `/api/events` | Rename an event when the session user is its creator. |
 | `DELETE` | `/api/events` | Delete an event and its data when the session user is its creator. |
 | `POST` | `/api/like` | Add or remove a user's like on a program item or topic. |

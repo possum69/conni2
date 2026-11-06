@@ -1,8 +1,8 @@
 window.pageTranslations = {
   en: {
     openSpace: 'Open Space', welcome: 'Welcome to Open Space!', pageLanguage: 'Language:', yourName: 'Your name:', enterName: 'Enter your name', saved: 'Saved',
-    githubSignIn: 'Sign in to Open Space', githubLogin: 'Continue with GitHub', signOut: 'Sign out', changeLocalName: 'Change local name', localDevelopment: 'Local development', localDevelopmentUser: 'Local development ({name})', authLoadFailed: 'Could not verify the GitHub session.',
-    authorizedUsers: 'Authorized GitHub accounts', githubUsername: 'GitHub username', addAuthorizedUser: 'Grant access', removeAuthorizedUser: 'Remove access', authorizedUserAdded: 'Access granted.', authorizedUserRemoved: 'Access removed.', authorizedUserFailed: 'Could not update authorized accounts.', eventCreatedAddUsers: 'Event created. Add accounts or open the event.',
+    githubSignIn: 'Sign in to Open Space', githubLogin: 'Continue with GitHub', microsoftLogin: 'Continue with Microsoft', signOut: 'Sign out', changeLocalName: 'Change local name', localDevelopment: 'Local development', localDevelopmentUser: 'Local development ({name})', authLoadFailed: 'Could not verify the sign-in session.',
+    authorizedUsers: 'Authorized accounts', githubUsername: 'GitHub username or Microsoft email', addAuthorizedUser: 'Grant access', removeAuthorizedUser: 'Remove access', authorizedUserAdded: 'Access granted.', authorizedUserRemoved: 'Access removed.', authorizedUserFailed: 'Could not update authorized accounts.', eventCreatedAddUsers: 'Event created. Add accounts or open the event.',
     profileSetup: 'Tell us about yourself', favoriteLanguage: 'Favorite language', continueToEvents: 'Continue', chooseEvent: 'Choose an event',
     selectEvent: 'Select an event', openEvent: 'Open event', createEvent: 'Create a new event', eventName: 'Event name', addEvent: 'Create event',
     currentEvent: 'Current event:', switchEvent: 'Switch event', manageEvent: 'Manage event', saveEvent: 'Save event', deleteEvent: 'Delete event',

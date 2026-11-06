@@ -86,7 +86,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
         return super().send_head()
 
     def log_request(self, code="-", size="-"):
-        if urlparse(self.path).path == "/auth/callback":
+        if urlparse(self.path).path in ("/auth/callback", "/auth/microsoft/callback"):
             return
         super().log_request(code, size)
 
@@ -97,6 +97,12 @@ class ConniHandler(SimpleHTTPRequestHandler):
             return
         if request_path == "/auth/callback":
             self.finish_github_login()
+            return
+        if request_path == "/auth/microsoft/login":
+            self.start_microsoft_login()
+            return
+        if request_path == "/auth/microsoft/callback":
+            self.finish_microsoft_login()
             return
         if request_path == "/api/me":
             user = self.authenticated_user()
@@ -145,6 +151,16 @@ class ConniHandler(SimpleHTTPRequestHandler):
         client_id = os.environ.get("GITHUB_CLIENT_ID")
         client_secret = os.environ.get("GITHUB_CLIENT_SECRET")
         redirect_uri = os.environ.get("GITHUB_REDIRECT_URI")
+        session_secret = os.environ.get("SESSION_SECRET")
+        if not all((client_id, client_secret, redirect_uri)) or not session_secret or len(session_secret) < 32:
+            return None
+        return client_id, client_secret, redirect_uri, session_secret
+
+    @staticmethod
+    def microsoft_oauth_configuration():
+        client_id = os.environ.get("MICROSOFT_CLIENT_ID")
+        client_secret = os.environ.get("MICROSOFT_CLIENT_SECRET")
+        redirect_uri = os.environ.get("MICROSOFT_REDIRECT_URI")
         session_secret = os.environ.get("SESSION_SECRET")
         if not all((client_id, client_secret, redirect_uri)) or not session_secret or len(session_secret) < 32:
             return None
@@ -200,7 +216,10 @@ class ConniHandler(SimpleHTTPRequestHandler):
         return user
 
     def secure_cookie(self):
-        redirect_uri = os.environ.get("GITHUB_REDIRECT_URI", "")
+        if self.path.startswith("/auth/microsoft/"):
+            redirect_uri = os.environ.get("MICROSOFT_REDIRECT_URI", "")
+        else:
+            redirect_uri = os.environ.get("GITHUB_REDIRECT_URI", "")
         return "; Secure" if os.environ.get("RENDER") or redirect_uri.startswith("https://") else ""
 
     def redirect(self, location, cookie_header=None):
@@ -274,7 +293,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
             profile = oauth.get("https://api.github.com/user").json()
             if not isinstance(profile.get("id"), int) or not isinstance(profile.get("login"), str):
                 raise ValueError("Invalid GitHub profile")
-            user = {"id": str(profile["id"]), "login": profile["login"]}
+            user = {"id": str(profile["id"]), "login": profile["login"], "provider": "github"}
             session_cookie = URLSafeTimedSerializer(session_secret, salt="conni2-github-session").dumps(user)
             session_header = f"conni2_session={session_cookie}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800{self.secure_cookie()}"
             clear_state = f"conni2_oauth_state=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0{self.secure_cookie()}"
@@ -287,6 +306,93 @@ class ConniHandler(SimpleHTTPRequestHandler):
             self.send_json(400, {"error": "GitHub sign-in could not be completed"})
         except Exception:
             self.send_json(502, {"error": "Could not verify the GitHub account"})
+
+    def start_microsoft_login(self):
+        configuration = self.microsoft_oauth_configuration()
+        if configuration is None:
+            self.send_json(503, {"error": "Microsoft OAuth is not configured on the server"})
+            return
+
+        client_id, client_secret, redirect_uri, session_secret = configuration
+        state = secrets.token_urlsafe(32)
+        code_verifier = secrets.token_urlsafe(64)
+        oauth = OAuth2Session(
+            client_id,
+            client_secret,
+            scope="openid profile email User.Read",
+            redirect_uri=redirect_uri,
+            token_endpoint_auth_method="client_secret_post",
+            code_challenge_method="S256",
+        )
+        authorization_url, _ = oauth.create_authorization_url(
+            "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+            state=state,
+            code_verifier=code_verifier,
+        )
+        state_cookie = URLSafeTimedSerializer(session_secret, salt="conni2-microsoft-state").dumps({
+            "state": state,
+            "codeVerifier": code_verifier,
+        })
+        cookie = f"conni2_microsoft_state={state_cookie}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600{self.secure_cookie()}"
+        self.redirect(authorization_url, cookie)
+
+    def finish_microsoft_login(self):
+        configuration = self.microsoft_oauth_configuration()
+        cookie = self.cookie_value("conni2_microsoft_state")
+        query = parse_qs(urlparse(self.path).query)
+        state = query.get("state", [""])[0]
+        code = query.get("code", [""])[0]
+        if configuration is None or not cookie or not state or not code:
+            self.send_json(400, {"error": "Microsoft sign-in could not be completed"})
+            return
+
+        client_id, client_secret, redirect_uri, session_secret = configuration
+        try:
+            state_data = URLSafeTimedSerializer(session_secret, salt="conni2-microsoft-state").loads(cookie, max_age=600)
+            expected_state = state_data.get("state", "")
+            code_verifier = state_data.get("codeVerifier", "")
+            if not secrets.compare_digest(state, expected_state) or not code_verifier:
+                raise BadSignature("Invalid OAuth state")
+
+            oauth = OAuth2Session(
+                client_id,
+                client_secret,
+                scope="openid profile email User.Read",
+                redirect_uri=redirect_uri,
+                token_endpoint_auth_method="client_secret_post",
+                code_challenge_method="S256",
+            )
+            oauth.fetch_token(
+                "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+                code=code,
+                code_verifier=code_verifier,
+            )
+            profile_response = oauth.get(
+                "https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName"
+            )
+            profile_response.raise_for_status()
+            profile = profile_response.json()
+            account_id = profile.get("id")
+            login = profile.get("mail") or profile.get("userPrincipalName")
+            if not isinstance(account_id, str) or not account_id or not isinstance(login, str) or not login.strip():
+                raise ValueError("Invalid Microsoft profile")
+            user = {
+                "id": f"microsoft:{account_id}",
+                "login": login.strip(),
+                "provider": "microsoft",
+            }
+            session_cookie = URLSafeTimedSerializer(session_secret, salt="conni2-github-session").dumps(user)
+            session_header = f"conni2_session={session_cookie}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800{self.secure_cookie()}"
+            clear_state = f"conni2_microsoft_state=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0{self.secure_cookie()}"
+            self.send_response(303)
+            self.send_header("Location", "/")
+            self.send_header("Set-Cookie", session_header)
+            self.send_header("Set-Cookie", clear_state)
+            self.end_headers()
+        except (BadSignature, SignatureExpired, ValueError, KeyError, OSError):
+            self.send_json(400, {"error": "Microsoft sign-in could not be completed"})
+        except Exception:
+            self.send_json(502, {"error": "Could not verify the Microsoft account"})
 
     def clear_session(self):
         self.send_response(204)
@@ -365,15 +471,20 @@ class ConniHandler(SimpleHTTPRequestHandler):
     @staticmethod
     def matches_github_account(entry, user):
         if isinstance(entry, str):
-            return entry.strip().casefold() == user.get("login", "").casefold()
+            return (
+                user.get("provider", "github") == "github"
+                and entry.strip().casefold() == user.get("login", "").casefold()
+            )
         if not isinstance(entry, dict):
+            return False
+        if entry.get("provider", "github") != user.get("provider", "github"):
             return False
         entry_id = entry.get("id")
         if entry_id is not None:
             normalized_id = str(entry_id)
             if normalized_id == user.get("id"):
                 return True
-            if normalized_id.isdecimal():
+            if normalized_id.isdecimal() or normalized_id.startswith(("microsoft:", "email:")):
                 return False
         login = entry.get("login")
         return isinstance(login, str) and login.strip().casefold() == user.get("login", "").casefold()
@@ -728,6 +839,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
             "name": name.strip(),
             "creatorId": user["id"],
             "creatorLogin": user["login"],
+            "creatorProvider": user.get("provider", "github"),
             "authorizedUsers": [],
             "program": [],
             "topics": [],
@@ -794,12 +906,14 @@ class ConniHandler(SimpleHTTPRequestHandler):
     def is_event_creator(event, user):
         if user.get("local", False):
             return True
+        if event.get("creatorProvider", "github") != user.get("provider", "github"):
+            return False
         creator_id = event.get("creatorId")
         if creator_id is not None:
             normalized_id = str(creator_id)
             if normalized_id == user.get("id"):
                 return True
-            if normalized_id.isdecimal():
+            if normalized_id.isdecimal() or normalized_id.startswith(("microsoft:", "email:")):
                 return False
         creator_login = event.get("creatorLogin")
         return isinstance(creator_login, str) and creator_login.strip().casefold() == user.get("login", "").casefold()
@@ -810,10 +924,15 @@ class ConniHandler(SimpleHTTPRequestHandler):
         if not isinstance(event_id, str) or not event_id:
             self.send_json(400, {"error": "Invalid event"})
             return
-        if not isinstance(login, str) or not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?", login.strip()):
-            self.send_json(400, {"error": "Enter a valid GitHub username"})
+        if not isinstance(login, str):
+            self.send_json(400, {"error": "Enter a GitHub username or Microsoft email address"})
             return
         login = login.strip()
+        email = login.casefold()
+        is_email = bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email))
+        if not is_email and not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?", login):
+            self.send_json(400, {"error": "Enter a valid GitHub username or Microsoft email address"})
+            return
 
         data = self.read_data()
         event = self.find_event(data, event_id)
@@ -830,13 +949,17 @@ class ConniHandler(SimpleHTTPRequestHandler):
 
         authorized_users = event.setdefault("authorizedUsers", [])
         if any(
-            (entry.casefold() if isinstance(entry, str) else entry.get("login", "").casefold()) == login.casefold()
+            (
+                entry.casefold()
+                if isinstance(entry, str)
+                else entry["login"].casefold()
+            ) == login.casefold()
             for entry in authorized_users
-            if isinstance(entry, (str, dict))
+            if isinstance(entry, str) or (isinstance(entry, dict) and isinstance(entry.get("login"), str))
         ):
             self.send_json(409, {"error": "That account is already authorized"})
             return
-        authorized_user = {"login": login}
+        authorized_user = {"login": email, "provider": "microsoft"} if is_email else {"login": login}
         authorized_users.append(authorized_user)
         self.write_data(data)
         self.send_json(201, {"authorizedUsers": authorized_users})
@@ -849,7 +972,7 @@ class ConniHandler(SimpleHTTPRequestHandler):
             self.send_json(400, {"error": "Invalid event"})
             return
         if (not isinstance(user_id, str) or not user_id) and (not isinstance(login, str) or not login.strip()):
-            self.send_json(400, {"error": "Invalid GitHub user"})
+            self.send_json(400, {"error": "Invalid authorized account"})
             return
 
         data = self.read_data()
@@ -866,7 +989,17 @@ class ConniHandler(SimpleHTTPRequestHandler):
             entry for entry in authorized_users
             if not (
                 (isinstance(user_id, str) and bool(user_id) and isinstance(entry, dict) and str(entry.get("id", "")) == user_id)
-                or (isinstance(login, str) and self.matches_github_account(entry, {"id": "", "login": login}))
+                or (
+                    isinstance(login, str)
+                    and (
+                        (isinstance(entry, str) and entry.casefold() == login.casefold())
+                        or (
+                            isinstance(entry, dict)
+                            and isinstance(entry.get("login"), str)
+                            and entry["login"].casefold() == login.casefold()
+                        )
+                    )
+                )
             )
         ]
         if len(updated_users) == len(authorized_users):

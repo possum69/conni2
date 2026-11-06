@@ -591,7 +591,8 @@ li {
   cursor: wait;
 }
 
-.setup-card .github-login-button {
+.setup-card .github-login-button,
+.setup-card .microsoft-login-button {
   display: inline-block;
   border-radius: 8px;
   padding: 10px 14px;
@@ -602,6 +603,14 @@ li {
 }
 
 .github-login-button[hidden] {
+  display: none;
+}
+
+.microsoft-login-button {
+  margin-left: 8px;
+}
+
+.microsoft-login-button[hidden] {
   display: none;
 }
 

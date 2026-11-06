@@ -12,6 +12,7 @@
         <section id="profile-setup-step">
           <h2 id="setup-heading" data-i18n="githubSignIn">Sign in to Open Space</h2>
           <a id="github-login-link" class="github-login-button" href="/auth/login" data-i18n="githubLogin">Continue with GitHub</a>
+          <a id="microsoft-login-link" class="microsoft-login-button" href="/auth/microsoft/login" data-i18n="microsoftLogin">Continue with Microsoft</a>
           <form id="local-login-form" hidden>
             <label for="local-user-name" data-i18n="yourName">Your name</label>
             <input id="local-user-name" name="name" type="text" maxlength="120" autocomplete="name" required />
@@ -36,10 +37,10 @@
               <p id="event-manage-status" class="setup-status" role="status" aria-live="polite"></p>
             </form>
             <section class="authorized-users-panel" aria-labelledby="authorized-users-heading">
-              <h3 id="authorized-users-heading" data-i18n="authorizedUsers">Authorized GitHub accounts</h3>
+              <h3 id="authorized-users-heading" data-i18n="authorizedUsers">Authorized accounts</h3>
               <form id="authorized-user-form">
-                <label for="authorized-user-login" data-i18n="githubUsername">GitHub username</label>
-                <input id="authorized-user-login" name="login" type="text" maxlength="39" autocomplete="off" required />
+                <label for="authorized-user-login" data-i18n="githubUsername">GitHub username or Microsoft email</label>
+                <input id="authorized-user-login" name="login" type="text" maxlength="254" autocomplete="off" required />
                 <button type="submit" data-i18n="addAuthorizedUser">Grant access</button>
               </form>
               <ul id="authorized-user-list"></ul>

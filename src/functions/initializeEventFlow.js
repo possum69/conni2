@@ -155,6 +155,7 @@ async function initializeEventFlow() {
   const profileStep = document.getElementById('profile-setup-step');
   const eventStep = document.getElementById('event-setup-step');
   const githubLoginLink = document.getElementById('github-login-link');
+  const microsoftLoginLink = document.getElementById('microsoft-login-link');
   const localLoginForm = document.getElementById('local-login-form');
   try {
     const response = await fetch('/api/me');
@@ -162,6 +163,7 @@ async function initializeEventFlow() {
       profileStep.hidden = false;
       eventStep.hidden = true;
       githubLoginLink.hidden = false;
+      microsoftLoginLink.hidden = false;
       localLoginForm.hidden = true;
       return;
     }
@@ -171,6 +173,7 @@ async function initializeEventFlow() {
     currentUserName = result.user.login;
     if (result.user.local && !currentUserName) {
       githubLoginLink.hidden = true;
+      microsoftLoginLink.hidden = true;
       localLoginForm.hidden = false;
       document.getElementById('local-user-name').focus();
       profileStep.hidden = false;
@@ -178,10 +181,13 @@ async function initializeEventFlow() {
       return;
     }
     githubLoginLink.hidden = true;
+    microsoftLoginLink.hidden = true;
     localLoginForm.hidden = true;
     document.getElementById('github-user-name').textContent = result.user.local
       ? translate('localDevelopmentUser', { name: currentUserName })
-      : `@${currentUserName}`;
+      : result.user.provider === 'microsoft'
+        ? currentUserName
+        : `@${currentUserName}`;
     document.getElementById('github-user-name').hidden = false;
     document.getElementById('logout-button').textContent = result.user.local
       ? translate('changeLocalName')
@@ -193,6 +199,7 @@ async function initializeEventFlow() {
     profileStep.hidden = false;
     eventStep.hidden = true;
     githubLoginLink.hidden = false;
+    microsoftLoginLink.hidden = false;
     localLoginForm.hidden = true;
     document.getElementById('event-setup-status').textContent = error.message || translate('authLoadFailed');
   }

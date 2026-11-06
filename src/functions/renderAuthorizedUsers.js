@@ -7,7 +7,7 @@ function renderAuthorizedUsers() {
     const userId = typeof user === 'string' ? '' : user.id;
     const item = document.createElement('li');
     const loginLabel = document.createElement('span');
-    loginLabel.textContent = `@${login}`;
+    loginLabel.textContent = login.includes('@') ? login : `@${login}`;
     const removeButton = document.createElement('button');
     removeButton.type = 'button';
     removeButton.textContent = translate('removeAuthorizedUser');

@@ -104,7 +104,7 @@ window.pageTranslations = {
     signOut: 'Afmellen',
     nameStorageUnavailable: 'De Naam lett sik nich spiekern', likesSaveFailed: 'Likes kunn nich spiekert warrn', program: 'Programm', topics: 'Themen', locations: 'Öörd',
     language: 'Spraak:', all: 'All', filter: 'Filter:', allUsers: 'All', myLikes: 'Mien Likes', myContribution: 'Mien Bidrääg', myLikesAndContribution: 'Mien Likes + mien Bidrääg', search: 'Söken:',
-    searchPlaceholder: 'Naam, Beschrieven, Mitwirkende', details: 'Details:', full: 'Vull', compact: 'Kort', view: 'Ansicht:', list: 'List', calendar: 'Kalender',
+    searchPlaceholder: 'Naam, Beschrieven, Mitwirkende', details: 'Grött:', full: 'Vull', compact: 'Kort', view: 'Ansicht:', list: 'List', calendar: 'Kalenner',
     loadingProgram: 'Programm warrt laadt...', loadingTopics: 'Themen warrt laadt...', loadingLocations: 'Öörd warrt laadt...', show: 'Wiesen:', allItems: 'All Indrääg',
     topicsOnly: 'Blots Themen', sortBy: 'Sorteren na:', date: 'Datum', likes: 'Likes', name: 'Naam:', programBadge: 'Programm', topicBadge: 'Thema',
     likers: 'Lüüd, de dat möögt:', contributors: 'Mitwirkende:', programNoMatches: 'Keen Programmelement passt to disse Filter.', itemsNoMatches: 'Keen Programmelement un keen Thema passt to disse Filter.', itemsShown: '{count} Indrääg wiest',

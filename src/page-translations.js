@@ -20,7 +20,7 @@ window.pageTranslations = {
   },
   de: {
     openSpace: 'Open Space', welcome: 'Willkommen beim Open Space!', pageLanguage: 'Sprache:', yourName: 'Dein Name:', enterName: 'Namen eingeben', saved: 'Gespeichert',
-    profileSetup: 'Erzähl uns etwas über dich', favoriteLanguage: 'Lieblingssprache', continueToEvents: 'Weiter', chooseEvent: 'Veranstaltung auswählen',
+    signOut: 'Abmelden', profileSetup: 'Erzähl uns etwas über dich', favoriteLanguage: 'Lieblingssprache', continueToEvents: 'Weiter', chooseEvent: 'Veranstaltung auswählen',
     selectEvent: 'Veranstaltung auswählen', openEvent: 'Veranstaltung öffnen', createEvent: 'Neue Veranstaltung erstellen', eventName: 'Veranstaltungsname', addEvent: 'Veranstaltung erstellen',
     currentEvent: 'Aktuelle Veranstaltung:', switchEvent: 'Veranstaltung wechseln', manageEvent: 'Veranstaltung verwalten', saveEvent: 'Veranstaltung speichern', deleteEvent: 'Veranstaltung löschen',
     noEvents: 'Noch keine Veranstaltungen. Erstelle eine, um zu beginnen.', eventSaved: 'Veranstaltung gespeichert.', eventDeleted: 'Veranstaltung gelöscht.',
@@ -37,7 +37,7 @@ window.pageTranslations = {
   },
   fr: {
     openSpace: 'Espace ouvert', welcome: 'Bienvenue à l’Espace ouvert !', pageLanguage: 'Langue:', yourName: 'Votre nom :', enterName: 'Saisissez votre nom', saved: 'Enregistré',
-    profileSetup: 'Parlez-nous de vous', favoriteLanguage: 'Langue préférée', continueToEvents: 'Continuer', chooseEvent: 'Choisir un événement',
+    signOut: 'Se déconnecter', profileSetup: 'Parlez-nous de vous', favoriteLanguage: 'Langue préférée', continueToEvents: 'Continuer', chooseEvent: 'Choisir un événement',
     selectEvent: 'Sélectionner un événement', openEvent: 'Ouvrir l’événement', createEvent: 'Créer un événement', eventName: 'Nom de l’événement', addEvent: 'Créer l’événement',
     currentEvent: 'Événement actuel :', switchEvent: 'Changer d’événement', manageEvent: 'Gérer l’événement', saveEvent: 'Enregistrer l’événement', deleteEvent: 'Supprimer l’événement',
     noEvents: 'Aucun événement. Créez-en un pour commencer.', eventSaved: 'Événement enregistré.', eventDeleted: 'Événement supprimé.',
@@ -54,7 +54,7 @@ window.pageTranslations = {
   },
   es: {
     openSpace: 'Espacio abierto', welcome: '¡Te damos la bienvenida al Espacio abierto!', pageLanguage: 'Idioma:', yourName: 'Tu nombre:', enterName: 'Escribe tu nombre', saved: 'Guardado',
-    profileSetup: 'Cuéntanos sobre ti', favoriteLanguage: 'Idioma favorito', continueToEvents: 'Continuar', chooseEvent: 'Elige un evento',
+    signOut: 'Cerrar sesión', profileSetup: 'Cuéntanos sobre ti', favoriteLanguage: 'Idioma favorito', continueToEvents: 'Continuar', chooseEvent: 'Elige un evento',
     selectEvent: 'Selecciona un evento', openEvent: 'Abrir evento', createEvent: 'Crear un evento', eventName: 'Nombre del evento', addEvent: 'Crear evento',
     currentEvent: 'Evento actual:', switchEvent: 'Cambiar de evento', manageEvent: 'Gestionar evento', saveEvent: 'Guardar evento', deleteEvent: 'Eliminar evento',
     noEvents: 'Todavía no hay eventos. Crea uno para empezar.', eventSaved: 'Evento guardado.', eventDeleted: 'Evento eliminado.',
@@ -71,7 +71,7 @@ window.pageTranslations = {
   },
   it: {
     openSpace: 'Spazio aperto', welcome: 'Benvenuti allo Spazio aperto!', pageLanguage: 'Lingua:', yourName: 'Il tuo nome:', enterName: 'Inserisci il tuo nome', saved: 'Salvato',
-    profileSetup: 'Parlaci di te', favoriteLanguage: 'Lingua preferita', continueToEvents: 'Continua', chooseEvent: 'Scegli un evento',
+    signOut: 'Esci', profileSetup: 'Parlaci di te', favoriteLanguage: 'Lingua preferita', continueToEvents: 'Continua', chooseEvent: 'Scegli un evento',
     selectEvent: 'Seleziona un evento', openEvent: 'Apri evento', createEvent: 'Crea un evento', eventName: 'Nome evento', addEvent: 'Crea evento',
     currentEvent: 'Evento attuale:', switchEvent: 'Cambia evento', manageEvent: 'Gestisci evento', saveEvent: 'Salva evento', deleteEvent: 'Elimina evento',
     noEvents: 'Nessun evento. Creane uno per iniziare.', eventSaved: 'Evento salvato.', eventDeleted: 'Evento eliminato.',
@@ -88,6 +88,7 @@ window.pageTranslations = {
   },
   sq: {
     openSpace: 'Hapësirë e hapur', welcome: 'Mirë se vini në Hapësirën e hapur!', pageLanguage: 'Gjuha:', yourName: 'Emri juaj:', enterName: 'Shkruani emrin tuaj', saved: 'U ruajt', currentEvent: 'Ngjarja aktuale:',
+    signOut: 'Dilni',
     nameStorageUnavailable: 'Emri nuk mund të ruhet', likesSaveFailed: 'Pëlqimet nuk mund të ruhen', program: 'Programi', topics: 'Temat', locations: 'Vendndodhjet',
     language: 'Gjuha:', all: 'Të gjitha', filter: 'Filtro:', allUsers: 'Të gjithë', myLikes: 'Pëlqimet e mia', myContribution: 'Kontributet e mia', myLikesAndContribution: 'Pëlqimet e mia + kontributet e mia', search: 'Kërko:',
     searchPlaceholder: 'Emri, përshkrimi, kontribuesi', details: 'Detajet:', full: 'Të plota', compact: 'Të përmbledhura', view: 'Pamja:', list: 'Listë', calendar: 'Kalendar',
@@ -100,6 +101,7 @@ window.pageTranslations = {
   },
   nds: {
     openSpace: 'Open Ruum', welcome: 'Moin un willkamen bi’n Open Ruum!', pageLanguage: 'Spraak:', yourName: 'Dien Naam:', enterName: 'Naam ingeven', saved: 'Spiekert', currentEvent: 'Aktuelle Veranstaltung:',
+    signOut: 'Afmellen',
     nameStorageUnavailable: 'De Naam lett sik nich spiekern', likesSaveFailed: 'Likes kunn nich spiekert warrn', program: 'Programm', topics: 'Themen', locations: 'Öörd',
     language: 'Spraak:', all: 'All', filter: 'Filter:', allUsers: 'All', myLikes: 'Mien Likes', myContribution: 'Mien Bidrääg', myLikesAndContribution: 'Mien Likes + mien Bidrääg', search: 'Söken:',
     searchPlaceholder: 'Naam, Beschrieven, Mitwirkende', details: 'Details:', full: 'Vull', compact: 'Kort', view: 'Ansicht:', list: 'List', calendar: 'Kalender',
@@ -112,6 +114,7 @@ window.pageTranslations = {
   },
   fy: {
     openSpace: 'Iepen romte', welcome: 'Wolkom yn de Iepen romte!', pageLanguage: 'Taal:', yourName: 'Dyn namme:', enterName: 'Folje dyn namme yn', saved: 'Bewarre', currentEvent: 'Aktueel barren:',
+    signOut: 'Ofmelde',
     nameStorageUnavailable: 'De namme kin net bewarre wurde', likesSaveFailed: 'Likes koene net bewarre wurde', program: 'Programma', topics: 'Tema’s', locations: 'Lokaasjes',
     language: 'Taal:', all: 'Alles', filter: 'Filter:', allUsers: 'Elkenien', myLikes: 'Myn likes', myContribution: 'Myn bydragen', myLikesAndContribution: 'Myn likes + myn bydragen', search: 'Sykje:',
     searchPlaceholder: 'Namme, beskriuwing, meiwurker', details: 'Details:', full: 'Folslein', compact: 'Koart', view: 'Werjefte:', list: 'List', calendar: 'Aginda',
@@ -124,6 +127,7 @@ window.pageTranslations = {
   },
   bar: {
     openSpace: 'Open Space', welcome: 'Griaß God beim Open Space!', pageLanguage: 'Sproch:', yourName: 'Dei Nam:', enterName: 'Gib dein Nam ei', saved: 'Gspeichert', currentEvent: 'Aktuelle Veranstaltung:',
+    signOut: 'Abmeldn',
     nameStorageUnavailable: 'Da Nam ko ned gspeichert wern', likesSaveFailed: 'De Likes ham ned gspeichert wern kenna', program: 'Programm', topics: 'Themen', locations: 'Orte',
     language: 'Sproch:', all: 'Olle', filter: 'Filter:', allUsers: 'Olle', myLikes: 'Mei Likes', myContribution: 'Mei Beiträge', myLikesAndContribution: 'Mei Likes + mei Beiträge', search: 'Suacha:',
     searchPlaceholder: 'Nam, Beschreibung, Mitwirkende', details: 'Details:', full: 'Voll', compact: 'Kompakt', view: 'Ansicht:', list: 'Listn', calendar: 'Kalender',
@@ -136,6 +140,7 @@ window.pageTranslations = {
   },
   frk: {
     openSpace: 'Offner Raum', welcome: 'Grüß Gott beim Offnen Raum!', pageLanguage: 'Sproch:', yourName: 'Dei Nam:', enterName: 'Nam ei gebn', saved: 'Gspeichert', currentEvent: 'Aktuelle Veranstaltung:',
+    signOut: 'Abmelde',
     nameStorageUnavailable: 'Nam kon ned gspeichert wern', likesSaveFailed: 'Likes ham ned gspeichert wern kenna', program: 'Programm', topics: 'Themen', locations: 'Orte',
     language: 'Sproch:', all: 'Olle', filter: 'Filter:', allUsers: 'Olle', myLikes: 'Mei Likes', myContribution: 'Mei Beiträge', myLikesAndContribution: 'Mei Likes + mei Beiträge', search: 'Suachn:',
     searchPlaceholder: 'Nam, Beschreibung, Mitwirkende', details: 'Details:', full: 'Vollständig', compact: 'Kompakt', view: 'Ansicht:', list: 'Listn', calendar: 'Kalender',
@@ -148,6 +153,7 @@ window.pageTranslations = {
   },
   hes: {
     openSpace: 'Open Space', welcome: 'Ei Gude zum Open Space!', pageLanguage: 'Sprooch:', yourName: 'Dein Name:', enterName: 'Name eingebe', saved: 'Gespeichert', currentEvent: 'Aktuelle Veranstaltung:',
+    signOut: 'Abmelde',
     nameStorageUnavailable: 'Name kann net gespeichert wern', likesSaveFailed: 'Likes konnte net gespeichert wern', program: 'Programm', topics: 'Themen', locations: 'Orte',
     language: 'Sprooch:', all: 'Alle', filter: 'Filter:', allUsers: 'Alle', myLikes: 'Mei Likes', myContribution: 'Mei Beiträge', myLikesAndContribution: 'Mei Likes + mei Beiträge', search: 'Suche:',
     searchPlaceholder: 'Name, Beschreibung, Mitwirkende', details: 'Details:', full: 'Vollständig', compact: 'Kompakt', view: 'Ansicht:', list: 'Liste', calendar: 'Kalender',
@@ -160,6 +166,7 @@ window.pageTranslations = {
   },
   ksh: {
     openSpace: 'Offe Ruum', welcome: 'Jode Daach un willkumme em Offe Ruum!', pageLanguage: 'Sproch:', yourName: 'Ding Name:', enterName: 'Ding Name aanjävve', saved: 'Jespeschert', currentEvent: 'Aktuelle Veranstaltung:',
+    signOut: 'Aßmelle',
     nameStorageUnavailable: 'Dä Name kunnt nit jeseschert wäde', likesSaveFailed: 'Ding Likes kunnte nit jeseschert wäde', program: 'Programm', topics: 'Themen', locations: 'Plätz',
     language: 'Sproch:', all: 'Alles', filter: 'Filter:', allUsers: 'All Minsche', myLikes: 'Ming Likes', myContribution: 'Ming Beiträge', myLikesAndContribution: 'Ming Likes + ming Beiträge', search: 'Söke:',
     searchPlaceholder: 'Name, Beschrievung, Metwirkende', details: 'Details:', full: 'Voll', compact: 'Kompakt', view: 'Ansicht:', list: 'Leß', calendar: 'Kalender',
@@ -172,6 +179,7 @@ window.pageTranslations = {
   },
   ar: {
     openSpace: 'مساحة مفتوحة', welcome: 'مرحبًا بكم في المساحة المفتوحة!', pageLanguage: 'لغة الصفحة:', yourName: 'اسمك:', enterName: 'أدخل اسمك', saved: 'تم الحفظ', currentEvent: 'الفعالية الحالية:',
+    signOut: 'تسجيل الخروج',
     nameStorageUnavailable: 'تعذر حفظ الاسم', likesSaveFailed: 'تعذر حفظ الإعجابات', program: 'البرنامج', topics: 'المواضيع', locations: 'المواقع',
     language: 'اللغة:', all: 'الكل', filter: 'تصفية:', allUsers: 'كل المستخدمين', myLikes: 'إعجاباتي', myContribution: 'مساهماتي', myLikesAndContribution: 'إعجاباتي + مساهماتي', search: 'بحث:',
     searchPlaceholder: 'الاسم، الوصف، المساهم', details: 'التفاصيل:', full: 'كامل', compact: 'مختصر', view: 'العرض:', list: 'قائمة', calendar: 'تقويم',
@@ -184,6 +192,7 @@ window.pageTranslations = {
   },
   he: {
     openSpace: 'מרחב פתוח', welcome: 'ברוכים הבאים למרחב הפתוח!', pageLanguage: 'שפת האתר:', yourName: 'השם שלך:', enterName: 'הזן את שמך', saved: 'נשמר', currentEvent: 'האירוע הנוכחי:',
+    signOut: 'התנתקות',
     nameStorageUnavailable: 'לא ניתן לשמור את השם', likesSaveFailed: 'לא ניתן לשמור את הלייקים', program: 'תוכנית', topics: 'נושאים', locations: 'מיקומים',
     language: 'שפה:', all: 'הכול', filter: 'סינון:', allUsers: 'כולם', myLikes: 'הלייקים שלי', myContribution: 'התרומות שלי', myLikesAndContribution: 'הלייקים שלי + התרומות שלי', search: 'חיפוש:',
     searchPlaceholder: 'שם, תיאור, משתתף', details: 'פרטים:', full: 'מלא', compact: 'מצומצם', view: 'תצוגה:', list: 'רשימה', calendar: 'לוח שנה',
@@ -195,4 +204,3 @@ window.pageTranslations = {
     capacity: 'קיבולת:', facilities: 'מתקנים:', programItems: 'פריטי תוכנית:', noProgramItems: 'אין פריטי תוכנית', locationBadge: 'מיקום', minutes: '{count} דקות', loadError: 'לא ניתן לטעון את נתוני התוכנית.'
   }
 };
-

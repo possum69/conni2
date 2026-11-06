@@ -183,10 +183,14 @@ class ConniHandler(SimpleHTTPRequestHandler):
 
     def local_auth_bypass_enabled(self):
         if os.environ.get("RENDER") or os.environ.get("LOCAL_AUTH_BYPASS", "").casefold() != "true":
+            print("Local authentication bypass is disabled. Set LOCAL_AUTH_BYPASS=true in the environment to enable it.")
             return False
-        try:
-            return ipaddress.ip_address(self.client_address[0]).is_loopback
+        try:            
+            rc = ipaddress.ip_address(self.client_address[0]).is_loopback
+            print("Local authentication bypass is enabled.")
+            return rc
         except ValueError:
+            print("Local authentication bypass is disabled. Could not parse client IP address.")
             return False
 
     def require_authenticated_user(self):

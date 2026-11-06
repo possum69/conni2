@@ -5,7 +5,7 @@ Suite Teardown    Close All Browsers
 Test Timeout      5 minutes
 
 *** Variables ***
-${BASE_URL}       http://127.0.0.1:8000/
+${BASE_URL}       http://127.0.0.1:8080/
 ${BROWSER}        edge
 ${ALPHA}          RF Contributor Alpha
 ${BETA}           RF Contributor Beta
@@ -130,13 +130,14 @@ Local User Can Manage Events Locations Topics And Program Views
     Sign In And Leave Event Chooser Open
     Click Element    css=#event-manage-panel summary
     Click Element    id=delete-event-button
-    Handle Alert    ACCEPT
+    Handle Alert    ACCEPT    
     Wait Until Keyword Succeeds    10 seconds    200 milliseconds    Element Should Be Disabled    id=event-select
     Element Should Contain    id=event-select    No events yet.
-
+    
 *** Keywords ***
 Open Local App
-    Open Browser    ${BASE_URL}    ${BROWSER}    options=add_argument("--headless=new"); add_argument("--disable-gpu"); add_argument("--window-size=1440,1200")
+    Open Browser    ${BASE_URL}    ${BROWSER}
+    #    options=add_argument("--headless=new"); add_argument("--disable-gpu"); add_argument("--window-size=1440,1200")
     Set Selenium Speed    0.1 seconds
     Set Selenium Timeout    10 seconds
 
